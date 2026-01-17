@@ -1,8 +1,12 @@
 {
   "name": "arbini.family",
-  "dockerComposeFile": "docker-compose.yml",
+  "initializeCommand": ".devcontainer/setup-git-worktree.sh",
+  "dockerComposeFile": ["docker-compose.yml", "docker-compose.worktree.yml"],
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind"
+  ],
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2.5.2": {
       "configureZshAsDefaultShell": true,
