@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "setup": "cp $CONDUCTOR_ROOT_PATH/.env* . 2>/dev/null || true && cp -r $CONDUCTOR_ROOT_PATH/.vercel . 2>/dev/null || true && pnpm install",
+    "run": "pnpm run dev",
+    "archive": ""
+  }
+}
