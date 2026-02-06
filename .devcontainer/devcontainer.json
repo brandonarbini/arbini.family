@@ -1,27 +1,21 @@
 {
   "name": "arbini.family",
-  "initializeCommand": ".devcontainer/setup-git-worktree.sh",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "initializeCommand": ".devcontainer/initialize.sh",
+  "postCreateCommand": ".devcontainer/post-create.sh",
   "dockerComposeFile": ["docker-compose.yml", "docker-compose.worktree.yml"],
   "service": "app",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind"
-  ],
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2.5.2": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
       "configureZshAsDefaultShell": true,
+      "installOhMyZsh": true,
       "upgradePackages": false
-    },
-    "ghcr.io/christophermacgown/devcontainer-features/direnv:1": {
-      "autoEnable": true,
-      "architecture": "amd64",
-      "version": "latest"
     }
   },
   "customizations": {
     "vscode": {
       "extensions": [
-        "mikestead.dotenv",
         "streetsidesoftware.code-spell-checker",
         "esbenp.prettier-vscode",
         "dbaeumer.vscode-eslint",
@@ -34,14 +28,12 @@
         "codezombiech.gitignore",
         "wmaurer.change-case",
         "jgclark.vscode-todo-highlight",
-        "johnpapa.vscode-peacock",
         "GraphQL.vscode-graphql-syntax",
         "pflannery.vscode-versionlens",
         "Prisma.prisma",
         "bradgashler.htmltagwrap",
         "bradlc.vscode-tailwindcss",
-        "GitHub.copilot",
-        "DotJoshJohnson.xml"
+        "Anthropic.claude-code"
       ]
     }
   }
