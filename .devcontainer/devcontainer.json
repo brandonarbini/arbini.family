@@ -1,10 +1,13 @@
 {
   "name": "arbini.family",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceFolder": "/workspace",
   "initializeCommand": ".devcontainer/initialize.sh",
   "postCreateCommand": ".devcontainer/post-create.sh",
   "dockerComposeFile": ["docker-compose.yml", "docker-compose.worktree.yml"],
   "service": "app",
+  "containerEnv": {
+    "pnpm_config_store_dir": "/home/node/.pnpm-store"
+  },
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": true,
@@ -20,18 +23,7 @@
         "esbenp.prettier-vscode",
         "dbaeumer.vscode-eslint",
         "ms-azuretools.vscode-docker",
-        "naumovs.color-highlight",
-        "kamikillerto.vscode-colorize",
         "eamodio.gitlens",
-        "GraphQL.vscode-graphql",
-        "kumar-harsh.graphql-for-vscode",
-        "codezombiech.gitignore",
-        "wmaurer.change-case",
-        "jgclark.vscode-todo-highlight",
-        "GraphQL.vscode-graphql-syntax",
-        "pflannery.vscode-versionlens",
-        "Prisma.prisma",
-        "bradgashler.htmltagwrap",
         "bradlc.vscode-tailwindcss",
         "Anthropic.claude-code"
       ]
