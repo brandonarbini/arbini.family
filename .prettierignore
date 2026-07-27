@@ -1,0 +1,4 @@
+# BEGIN dev-env:prettier-ignore
+# pnpm owns the lockfile's formatting; reformatting it invites merge conflicts for no gain.
+pnpm-lock.yaml
+# END dev-env:prettier-ignore

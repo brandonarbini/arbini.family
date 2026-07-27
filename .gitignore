@@ -41,4 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 # devcontainer worktree
+
+# BEGIN dev-env:workspace
+.context/
 .devcontainer/docker-compose.worktree.yml
+# END dev-env:workspace
