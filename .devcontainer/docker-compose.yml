@@ -10,6 +10,8 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: .env.local
+        required: false
     command: sleep infinity
 
 volumes:

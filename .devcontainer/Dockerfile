@@ -7,4 +7,5 @@ RUN apt-get update \
 
 RUN npm install --global pnpm@11.17.0 && pnpm --version
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- -y
+RUN chsh -s /usr/bin/zsh node
 RUN mkdir -p /home/node/.pnpm-store && chown node:node /home/node/.pnpm-store
