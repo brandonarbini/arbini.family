@@ -8,14 +8,6 @@
   "containerEnv": {
     "pnpm_config_store_dir": "/home/node/.pnpm-store"
   },
-  "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "installZsh": true,
-      "configureZshAsDefaultShell": true,
-      "installOhMyZsh": true,
-      "upgradePackages": false
-    }
-  },
   "customizations": {
     "vscode": {
       "extensions": [

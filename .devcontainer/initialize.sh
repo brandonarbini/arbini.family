@@ -18,6 +18,37 @@ STUDIO_PORT=$((PORT_BASE + 2))
 EMAIL_PORT=$((PORT_BASE + 3))
 FALLBACK_PORT=$((PORT_BASE + 4))
 
+# Docker rolls the network endpoint back when it cannot publish a port, leaving the container
+# running with no interfaces at all. That surfaces much later as EAI_AGAIN on every registry
+# request rather than as a port error, so refuse to start instead of handing back a dead container.
+# A rebuild runs while this workspace's own containers still hold the ports, so only a *different*
+# compose project counts as a conflict.
+OWN_PROJECT=""
+OWN_CONTAINER="$(docker ps -aq --filter "label=devcontainer.local_folder=$(cd "$WORKSPACE_DIR" && pwd -P)" | head -n1 || true)"
+if [ -n "$OWN_CONTAINER" ]; then
+  OWN_PROJECT="$(docker inspect "$OWN_CONTAINER" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+fi
+PORT_CONFLICT=""
+for CHECK_PORT in $APP_PORT $FALLBACK_PORT; do
+  # A heredoc rather than a pipe: the loop must run in this shell so PORT_CONFLICT survives it.
+  while IFS=' ' read -r BUSY_NAME BUSY_PROJECT; do
+    [ -n "$BUSY_NAME" ] || continue
+    if [ -n "$OWN_PROJECT" ] && [ "$BUSY_PROJECT" = "$OWN_PROJECT" ]; then
+      continue
+    fi
+    PORT_CONFLICT="$PORT_CONFLICT  port $CHECK_PORT is already published by $BUSY_NAME (compose project ${BUSY_PROJECT:-none})
+"
+  done <<EOF
+$(docker ps --filter "publish=$CHECK_PORT" --format '{{.Names}} {{.Label "com.docker.compose.project"}}' 2>/dev/null || true)
+EOF
+done
+if [ -n "$PORT_CONFLICT" ]; then
+  echo "initialize: port base $PORT_BASE is unavailable:" >&2
+  printf '%s' "$PORT_CONFLICT" >&2
+  echo "Stop the container(s) above, or set DEV_ENV_PORT to a free base, then retry." >&2
+  exit 1
+fi
+
 COMMON_MOUNT=""
 if [ -f "$WORKSPACE_DIR/.git" ]; then
   COMMON_DIR="$(git -C "$WORKSPACE_DIR" rev-parse --git-common-dir)"
