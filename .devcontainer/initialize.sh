@@ -17,6 +17,7 @@ PG_PORT=$((PORT_BASE + 1))
 STUDIO_PORT=$((PORT_BASE + 2))
 EMAIL_PORT=$((PORT_BASE + 3))
 FALLBACK_PORT=$((PORT_BASE + 4))
+INNGEST_PORT=$((PORT_BASE + 5))
 
 # Docker rolls the network endpoint back when it cannot publish a port, leaving the container
 # running with no interfaces at all. That surfaces much later as EAI_AGAIN on every registry
