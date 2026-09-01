@@ -10,15 +10,13 @@ This project runs inside a Docker devcontainer. Conductor (always) and Claude Co
 
 **Important**: Do not create or start the devcontainer yourself. If the devcontainer is not running, ask the user to start it.
 
-Run commands using the wrapper script:
+Run commands with the devcontainer CLI, from the repository root:
 
 ```bash
-.devcontainer/run pnpm install
-.devcontainer/run pnpm dev
-.devcontainer/run pnpm test:run
+devcontainer exec --workspace-folder . pnpm install
+devcontainer exec --workspace-folder . pnpm dev
+devcontainer exec --workspace-folder . pnpm test:run
 ```
-
-The script auto-detects context and runs commands inside the container when needed.
 
 ### CRITICAL: Command Execution Rules
 
@@ -27,6 +25,6 @@ The script auto-detects context and runs commands inside the container when need
 - `pnpm`, `npm`, `npx`, `node`
 - Any build, test, lint, or type-check commands
 
-**ALWAYS prefix commands with:** `.devcontainer/run`
+**ALWAYS prefix commands with:** `devcontainer exec --workspace-folder .`
 
 If the devcontainer is not running, **STOP** and ask the user to start it. Do not attempt workarounds or run commands on the host.
