@@ -69,4 +69,44 @@ ${COMMON_MOUNT}
       - "$FALLBACK_PORT:3000"
 EOF
 
+# The file above is rewritten on every run, but `devcontainer up` starts an already-created
+# container with `docker compose up -d --no-recreate`, and Docker fixes port bindings at creation.
+# A container that predates a change to the publish list therefore keeps the old bindings while
+# this file claims the new ones -- the override reads correct and the port answers nothing, which
+# is a worse failure than a missing line because there is nothing to notice. Report it instead.
+#
+# A warning rather than an exit: unlike a port conflict, the container is working for everything it
+# already published, and this script also runs on the --remove-existing-container invocation that
+# fixes the problem, so failing here would stand in front of the remedy.
+#
+# --filter publish= is not usable for this. It matches only running containers, so a stopped one --
+# which `up` would restart with exactly these stale bindings -- would look like it publishes nothing
+# and report every port. HostConfig.PortBindings is what survives the container being stopped.
+if [ -n "$OWN_PROJECT" ]; then
+  PUBLISHED=""
+  for OWN_ID in $(docker ps -aq --filter "label=com.docker.compose.project=$OWN_PROJECT" 2>/dev/null); do
+    PUBLISHED="$PUBLISHED $(docker inspect "$OWN_ID" --format '{{range $port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{.HostPort}} {{end}}{{end}}' 2>/dev/null || true)"
+  done
+  STALE_PORTS=""
+  for WANT_PORT in $APP_PORT $FALLBACK_PORT; do
+    case " $PUBLISHED " in
+      *" $WANT_PORT "*) ;;
+      *) STALE_PORTS="$STALE_PORTS $WANT_PORT" ;;
+    esac
+  done
+  # devcontainer runs this script *before* it removes the old container, so a run that is already
+  # recreating would otherwise be told to re-run itself. Read the invoking command to tell the two
+  # apart. If that cannot be read the warning still prints: a redundant nudge is a smaller failure
+  # than staying silent about a port that answers nothing.
+  RECREATING=""
+  case "$(ps -o args= -p $PPID 2>/dev/null || true)" in
+    *--remove-existing-container*) RECREATING="1" ;;
+  esac
+  if [ -n "$STALE_PORTS" ] && [ -z "$RECREATING" ]; then
+    echo "initialize: this workspace's container was created before the current port list and does not publish:$STALE_PORTS" >&2
+    echo "  The override file is up to date, but Docker only applies published ports when a container is created." >&2
+    echo "  Recreate it to pick them up: devcontainer up --workspace-folder . --remove-existing-container" >&2
+  fi
+fi
+
 echo "initialize: app=$APP_PORT from workspace port base $PORT_BASE"
