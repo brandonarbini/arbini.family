@@ -4,4 +4,7 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
   esbuild: true
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
 confirmModulesPurge: false

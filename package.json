@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm dev:web",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -13,28 +13,43 @@
     "test": "vitest",
     "test:run": "vitest run",
     "prepare": "husky",
-    "dev:web": "next dev"
+    "dev:web": "next dev",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local prisma/seed.ts",
+    "prisma:initialize": "prisma generate && prisma migrate deploy",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "~7.9.1",
+    "@prisma/client": "~7.9.1",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
     "next": "16.1.1",
+    "pg": "~8.22.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^20.19.28",
+    "@types/pg": "~8.20.4",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
+    "dotenv": "^17.4.2",
     "eslint": "^9.39.2",
     "eslint-config-next": "16.1.1",
-    "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.3",
-    "prettier": "^3.6.2",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-config-prettier": "^10.1.8",
-    "vitest": "^4.0.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "husky": "^9.1.7",
-    "lint-staged": "^17.2.0"
+    "lint-staged": "^17.2.0",
+    "prettier": "^3.6.2",
+    "prisma": "~7.9.1",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
   },
   "packageManager": "pnpm@11.17.0",
   "engines": {

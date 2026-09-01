@@ -50,3 +50,6 @@ next-env.d.ts
 !.env.example
 !.env.test
 # END dev-env:env-files
+
+# prisma generated client
+/generated
