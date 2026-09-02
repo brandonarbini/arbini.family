@@ -41,19 +41,25 @@ export function PollForm({
   places,
   defaultTitle,
   defaultPlaceId,
-  defaultDays,
+  defaultOptions,
 }: {
   today: string;
   places: { id: string; name: string; isHome: boolean }[];
   defaultTitle?: string;
   defaultPlaceId?: string | null;
-  /** Pre-selected days, used by "Ask again" to re-run last week's poll shifted forward. */
-  defaultDays?: string[];
+  /** Pre-selected options, used by "Ask again" to shift last week's poll forward intact. */
+  defaultOptions?: { startsOn: string; endsOn: string }[];
 }) {
   const [state, formAction, pending] = useActionState(startPoll, null);
-  const [picked, setPicked] = useState<string[]>(defaultDays ?? []);
+  const [picked, setPicked] = useState<string[]>(
+    (defaultOptions ?? [])
+      .filter((option) => option.startsOn === option.endsOn)
+      .map((option) => option.startsOn),
+  );
   const [ranges, setRanges] = useState<{ startsOn: string; endsOn: string }[]>(
-    [],
+    (defaultOptions ?? []).filter(
+      (option) => option.startsOn !== option.endsOn,
+    ),
   );
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeStart, setRangeStart] = useState("");

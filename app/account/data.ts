@@ -1,6 +1,5 @@
 import "server-only";
 
-import { cacheLife, cacheTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -10,19 +9,12 @@ import { prisma } from "@/lib/prisma";
  * credential, with no side state to keep in step, and going direct keeps the public key itself
  * from being loaded at all. Only what the list renders is selected.
  *
- * The tag is route-private — it lives here rather than in `/lib` because only this directory
- * reads it and only this directory's `actions.ts` invalidates it. It is keyed by user, so one
- * person removing a passkey cannot clear another's list.
+ * Deliberately uncached. Removal goes through our Server Action, but registration is handled by
+ * Better Auth's route handler; there is no shared write boundary that can invalidate a cache tag
+ * after both operations. This is an account-only query over a handful of rows, so reading it fresh
+ * is cheaper and more reliable than letting a newly registered credential stay invisible.
  */
-export const PASSKEY_TAGS = {
-  forUser: (userId: string) => `passkeys:${userId}`,
-} as const;
-
 export async function getPasskeys(userId: string) {
-  "use cache";
-  cacheTag(PASSKEY_TAGS.forUser(userId));
-  cacheLife("days");
-
   return prisma.passkey.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },

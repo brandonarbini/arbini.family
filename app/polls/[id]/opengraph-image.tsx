@@ -7,16 +7,22 @@ import { getPoll } from "@/lib/board/data";
  * This is not decoration. The link is how the feature reaches anyone, and a bare URL in a message
  * thread is materially less likely to be tapped than one that says what it is asking about.
  *
- * Rendered *unauthenticated*, because the crawler that fetches it has no session — which is also
- * why `/polls` is deliberately absent from the matcher in `proxy.ts`. So it shows only the title
- * and how many dates are on offer: enough to be worth tapping, and nothing about who replied.
+ * Rendered *unauthenticated*, because the crawler that fetches it has no session. `proxy.ts`
+ * explicitly lets this asset through while guarding every page under `/polls`. So it shows only
+ * the title and how many dates are on offer: enough to be worth tapping, and nothing about who
+ * replied.
  */
 export const alt = "A poll";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image({ params }: { params: { id: string } }) {
-  const poll = await getPoll(params.id);
+export default async function Image({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const poll = await getPoll(id);
   const title = poll?.title ?? "A poll";
   const count = poll?.options.length ?? 0;
 

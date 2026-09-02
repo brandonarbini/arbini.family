@@ -309,6 +309,22 @@ describe("settlePoll writes to the board", () => {
     expect(stays[0].endsOn?.toISOString()).toBe(option.endsOn.toISOString());
   });
 
+  it("writes a stay for somebody who said yes and has no default place", async () => {
+    const noDefault = await makeProfile("no-default");
+    const { id } = await makePoll();
+    const option = await prisma.pollOption.findFirstOrThrow({
+      where: { pollId: id },
+    });
+    await replyToPoll(option.id, noDefault.profileId, ReplyKind.YES);
+
+    await settlePoll(id, option.id);
+
+    const stay = await prisma.stay.findFirstOrThrow({
+      where: { pollId: id, profileId: noDefault.profileId },
+    });
+    expect(stay.placeId).toBe(home.id);
+  });
+
   it("writes no stay for somebody who already lives at the gathering place", async () => {
     // `locationsOn` puts Brandon at home by default, so the row would add nothing to the board
     // while adding one to the stay editor every week.

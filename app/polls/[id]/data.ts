@@ -9,7 +9,11 @@ import {
   getPoll,
   getStaysForWindow,
 } from "@/lib/board/data";
-import { type CalendarDate, eachCalendarDay } from "@/lib/dates";
+import {
+  type CalendarDate,
+  differenceInCalendarDays,
+  eachCalendarDay,
+} from "@/lib/dates";
 import { type OptionTally, rankOptions, tallyPoll } from "@/lib/polls/tally";
 import { locationsOn } from "@/lib/presence";
 
@@ -75,7 +79,18 @@ export async function getPollView(
       min === null || option.startsOn < min ? option.startsOn : min,
     null,
   );
-  const stays = earliest ? await getStaysForWindow(earliest, 365) : [];
+  const latest = poll.options.reduce<CalendarDate | null>(
+    (max, option) =>
+      max === null || option.endsOn > max ? option.endsOn : max,
+    null,
+  );
+  const stays =
+    earliest && latest
+      ? await getStaysForWindow(
+          earliest,
+          differenceInCalendarDays(earliest, latest),
+        )
+      : [];
 
   const placesById = new Map(places.map((place) => [place.id, place]));
   // The same fallback `settlePoll` applies, so what the ballot says about who is away and what

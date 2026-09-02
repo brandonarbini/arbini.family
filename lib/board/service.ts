@@ -224,7 +224,14 @@ export async function settlePoll(
           kind: ReplyKind.YES,
           // The "only travel" half of the rule, expressed as a filter rather than as a loop over
           // everyone, so there is no window in which the wrong set has been assembled.
-          profile: { NOT: { defaultPlaceId: place } },
+          profile: {
+            is: {
+              OR: [
+                { defaultPlaceId: null },
+                { defaultPlaceId: { not: place } },
+              ],
+            },
+          },
         },
         select: { profileId: true },
       })

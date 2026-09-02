@@ -18,6 +18,13 @@ import { PATHNAME_HEADER, buildSignInUrl } from "@/lib/auth-redirect";
  * session yet — that is the entire purpose of the link.
  */
 export function proxy(request: NextRequest) {
+  // Chat crawlers have no family session, but they need this one route to render a useful link
+  // preview. Keep the rest of /polls behind the gate so a signed-out ballot request is redirected
+  // with its full path instead of falling back to the polls index in the shared layout.
+  if (request.nextUrl.pathname.endsWith("/opengraph-image")) {
+    return NextResponse.next();
+  }
+
   const path = request.nextUrl.pathname + request.nextUrl.search;
 
   if (!getSessionCookie(request)) {
@@ -35,5 +42,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/home/:path*", "/account/:path*"],
+  matcher: ["/home/:path*", "/account/:path*", "/polls/:path*"],
 };

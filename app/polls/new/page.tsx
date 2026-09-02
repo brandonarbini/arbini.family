@@ -29,9 +29,12 @@ export default async function NewPollPage({
     from ? getPoll(from) : null,
   ]);
   const repeated = previous?.options
-    .map((option) => addCalendarDays(option.startsOn, 7))
-    // A shifted day that has already passed is dropped rather than offered.
-    .filter((day) => day >= today);
+    .map((option) => ({
+      startsOn: addCalendarDays(option.startsOn, 7),
+      endsOn: addCalendarDays(option.endsOn, 7),
+    }))
+    // A shifted option that has already passed is dropped rather than offered.
+    .filter((option) => option.endsOn >= today);
 
   return (
     <div>
@@ -51,7 +54,7 @@ export default async function NewPollPage({
         places={places}
         defaultTitle={previous?.title}
         defaultPlaceId={previous?.placeId}
-        defaultDays={repeated}
+        defaultOptions={repeated}
       />
     </div>
   );
