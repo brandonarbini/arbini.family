@@ -4,4 +4,10 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
   esbuild: true
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
 confirmModulesPurge: false
+overrides:
+  pg: ~8.22.0
+  "@types/pg": ~8.20.4

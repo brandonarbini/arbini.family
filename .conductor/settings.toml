@@ -16,3 +16,23 @@ available_in = ["local"]
 command = "\"$CONDUCTOR_ROOT_PATH/.conductor/rebuild.sh\""
 icon = "wrench"
 available_in = ["local"]
+
+[scripts.run.seed]
+command = "devcontainer up --workspace-folder . >/dev/null && devcontainer exec --workspace-folder . pnpm db:seed"
+icon = "sprout"
+available_in = ["local"]
+
+[scripts.run.migrate]
+command = "devcontainer up --workspace-folder . >/dev/null && devcontainer exec --workspace-folder . pnpm prisma:initialize"
+icon = "database"
+available_in = ["local"]
+
+[scripts.run.studio]
+command = "\"$CONDUCTOR_ROOT_PATH/.conductor/run-studio.sh\""
+icon = "database"
+available_in = ["local"]
+
+[scripts.run.email]
+command = "devcontainer up --workspace-folder . >/dev/null && devcontainer exec --workspace-folder . pnpm dev:email"
+icon = "mail"
+available_in = ["local"]

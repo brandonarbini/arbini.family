@@ -2,3 +2,6 @@
 # pnpm owns the lockfile's formatting; reformatting it invites merge conflicts for no gain.
 pnpm-lock.yaml
 # END dev-env:prettier-ignore
+
+# prisma generated client
+/generated

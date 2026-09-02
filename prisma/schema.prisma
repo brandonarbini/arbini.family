@@ -1,0 +1,350 @@
+// The canonical Prisma 7 shape the fleet's test harness assumes: the `prisma-client` generator
+// emitting to a *directory*, inside which Prisma writes `client.ts`, `browser.ts`, `enums.ts` and
+// `models/`. The harness imports it as `@/generated/prisma/client`, so pointing `output` at
+// `../generated/prisma/client` would nest a level too deep and resolve to `client/client`.
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+// No `url` here on purpose. Under Prisma 7 driver adapters the connection string reaches the CLI
+// through `prisma.config.ts` and the runtime through `PrismaPg`, so a `url` in this block would be
+// a third, silently divergent source of truth.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth
+//
+// Managed by the library, shaped by us. Every `id` is minted by Postgres via
+// `gen_random_uuid()`, which pairs with `advanced.database.generateId: false` in `lib/auth.ts` —
+// the library's own base62 default does not fit a `@db.Uuid` column and fails the insert with an
+// opaque type error.
+//
+// There is no organization plugin here and there never will be: this is one family, not a tenant
+// per household, so `Member`, `Invitation` and `activeOrganizationId` have no analogue.
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique
+  emailVerified Boolean  @default(false) @map("email_verified")
+  name          String
+  image         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Better Auth relations
+  accounts Account[]
+  sessions Session[]
+  passkeys Passkey[]
+
+  // Domain relations
+  profile       Profile?
+  createdEvents Event[]
+  createdPolls  Poll[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  // Better Auth 1.7: the identity provider an account belongs to, so the same `accountId` from
+  // two different issuers cannot collide.
+  issuer                String
+  userId                String    @map("user_id") @db.Uuid
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@unique([issuer, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// Backs the magic-link tokens. Rows are short-lived by design; the token in `value` is a bearer
+// credential until it expires or is consumed.
+model Verification {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+model Passkey {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String?
+  publicKey    String    @map("public_key")
+  userId       String    @map("user_id") @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String    @map("credential_id")
+  counter      Int
+  deviceType   String    @map("device_type")
+  backedUp     Boolean   @map("backed_up")
+  transports   String?
+  createdAt    DateTime? @map("created_at")
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkeys")
+}
+
+// Rate limits live in the database rather than in memory so the magic-link throttle survives a
+// serverless cold start — an in-process counter resets on every new instance, which is exactly
+// when an attacker would benefit from it resetting.
+model RateLimit {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("rate_limits")
+}
+
+// ---------------------------------------------------------------------------
+// The family
+// ---------------------------------------------------------------------------
+
+enum FamilyRole {
+  PARENT
+  KID
+}
+
+// Family facts kept out of `User`, which Better Auth owns and reshapes across upgrades.
+model Profile {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String     @unique @map("user_id") @db.Uuid
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           FamilyRole
+  // A calendar date, not an instant: a birthday is the same day everywhere. Read through
+  // `calendarDateFromDbDate` in `lib/dates.ts`, never by formatting the column directly.
+  birthday       DateTime?  @db.Date
+  phone          String?
+  // Accent colour for this person across the board, so a row is identifiable at a glance.
+  color          String?
+  sortOrder      Int        @map("sort_order")
+  // Where this person lives when nothing says otherwise.
+  //
+  // The board treats an unrecorded day as *unknown* rather than assuming home, because an
+  // inferred default would make the gathering countdown confidently wrong. A declared default is
+  // not an inference: it is this person stating where they reside, so `locationsOn` may fall back
+  // to it. Null keeps the old behaviour — unknown stays unknown.
+  //
+  // Restrict, matching Stay: deleting a place must not silently strip four people of their home.
+  defaultPlaceId String?    @map("default_place_id") @db.Uuid
+  defaultPlace   Place?     @relation(fields: [defaultPlaceId], references: [id], onDelete: Restrict)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  stays       Stay[]
+  pollReplies PollReply[]
+
+  @@index([defaultPlaceId])
+  @@map("profiles")
+}
+
+// Somewhere a person can be. `name` is unique because `findNextGathering` decides togetherness by
+// comparing place *ids*: two rows both called "Home" would render as everyone being home while the
+// countdown insisted the family was apart, which is the kind of contradiction nobody would think
+// to look for in the data.
+//
+// Exactly one row should carry `isHome`. Postgres can enforce that with a partial unique index
+// (`CREATE UNIQUE INDEX ... ON places (is_home) WHERE is_home`), which Prisma cannot express in
+// the schema — add it as raw SQL in the migration if a second one ever appears.
+model Place {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  address   String?
+  isHome    Boolean  @default(false) @map("is_home")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stays     Stay[]
+  // People who live here. See `Profile.defaultPlaceId`.
+  residents Profile[]
+  polls     Poll[]
+
+  @@map("places")
+}
+
+// Presence as a date range at a place rather than a status field on a person. Every question the
+// board asks — who is where today, who arrives this month, when all five are next together — is
+// derived from these rows by `lib/presence.ts`.
+//
+// `endsOn` is the *last day at the place*, not the day of departure, so a one-night stay has
+// matching dates. `null` means open-ended: they are there until told otherwise.
+model Stay {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId String    @map("profile_id") @db.Uuid
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  placeId   String    @map("place_id") @db.Uuid
+  // Restrict, not Cascade: deleting a place must not silently erase the history of everyone who
+  // ever stayed there. The delete should fail and force the caller to deal with the stays first.
+  place     Place     @relation(fields: [placeId], references: [id], onDelete: Restrict)
+  startsOn  DateTime  @map("starts_on") @db.Date
+  endsOn    DateTime? @map("ends_on") @db.Date
+  note      String?
+  // Set when this stay was written by settling a poll rather than typed by a person.
+  //
+  // Cascade, unlike `Event.createdById`'s SetNull just below — and the difference is the point.
+  // That column is about *attribution* surviving its author; this one marks a row that is
+  // *derived*, and a derived row must not outlive the thing it was derived from. Deleting a poll
+  // says the plan is off, so the travel it arranged goes with it.
+  pollId    String?   @map("poll_id") @db.Uuid
+  poll      Poll?     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Covers both the per-person lookup and the board's window scan over upcoming dates.
+  @@index([profileId, startsOn])
+  @@index([startsOn])
+  @@index([pollId])
+  @@map("stays")
+}
+
+// Dated things worth putting on the board that are not stays — a graduation, a holiday. Birthdays
+// are deliberately absent: they are derived from `Profile.birthday` rather than duplicated here,
+// so they cannot drift out of sync with the person.
+model Event {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String
+  date        DateTime @db.Date
+  note        String?
+  // Nullable with SetNull rather than a required author: an event is family history, and losing
+  // "Ellie's graduation" because an account was removed would be a worse outcome than losing the
+  // attribution for it.
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  // Set when settling a poll put this on the calendar. Cascade, for the reason on `Stay.pollId`.
+  pollId      String?  @map("poll_id") @db.Uuid
+  poll        Poll?    @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@index([pollId])
+  @@map("events")
+}
+
+// ---------------------------------------------------------------------------
+// Polls
+//
+// "When are you free?" gets silence; "Thursday or Saturday?" gets answers. So the unit of
+// coordination is a poll with concrete dated options rather than an availability grid, and the
+// whole thing is reachable from one link somebody drops in the family chat.
+// ---------------------------------------------------------------------------
+
+enum PollStatus {
+  OPEN
+  SETTLED
+}
+
+enum ReplyKind {
+  YES
+  MAYBE
+  NO
+}
+
+model Poll {
+  id     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title  String
+  status PollStatus @default(OPEN)
+
+  // Where the gathering is, which settling needs in order to know what to write a stay *to*.
+  // Optional: most weekly polls are about the house, so the form defaults it to home and settling
+  // falls back to home when it is absent. Restrict matches Stay — deleting a place must not
+  // silently rewrite where the family agreed to meet.
+  placeId String? @map("place_id") @db.Uuid
+  place   Place?  @relation(fields: [placeId], references: [id], onDelete: Restrict)
+
+  // The option the family landed on. Unique because an option can settle at most one poll, which
+  // is what lets Prisma express this as a relation rather than a bare column with a hand-written
+  // constraint. SetNull rather than Cascade: deleting one option must not silently un-settle a
+  // poll the family has already acted on.
+  settledOptionId String?     @unique @map("settled_option_id") @db.Uuid
+  settledOption   PollOption? @relation("PollSettledOption", fields: [settledOptionId], references: [id], onDelete: SetNull)
+  settledAt       DateTime?   @map("settled_at")
+
+  // Nullable with SetNull, matching Event: a poll is a record of something the family decided,
+  // and losing it because an account was removed is worse than losing the attribution for it.
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  options PollOption[] @relation("PollOptions")
+  // Rows settling wrote. Cascade-deleted with the poll — see `Stay.pollId`.
+  stays   Stay[]
+  events  Event[]
+
+  @@index([status, createdAt])
+  @@map("polls")
+}
+
+// A candidate date. `endsOn` is the *last day*, inclusive — the same convention as `Stay`, so a
+// single-day option has matching dates and a holiday week is the same shape with a wider range.
+// Weekly polls are almost always single days.
+model PollOption {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pollId    String   @map("poll_id") @db.Uuid
+  poll      Poll     @relation("PollOptions", fields: [pollId], references: [id], onDelete: Cascade)
+  startsOn  DateTime @map("starts_on") @db.Date
+  endsOn    DateTime @map("ends_on") @db.Date
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  replies    PollReply[]
+  settledFor Poll?       @relation("PollSettledOption")
+
+  @@index([pollId, sortOrder])
+  @@map("poll_options")
+}
+
+model PollReply {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  optionId  String     @map("option_id") @db.Uuid
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  profileId String     @map("profile_id") @db.Uuid
+  profile   Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  kind      ReplyKind
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  // One answer per person per option: changing your mind is an update, not a second row. Without
+  // this the tally double-counts somebody who tapped twice, which is the most likely thing to
+  // happen on a phone.
+  @@unique([optionId, profileId])
+  @@index([profileId])
+  @@map("poll_replies")
+}

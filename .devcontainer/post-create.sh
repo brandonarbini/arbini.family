@@ -9,3 +9,4 @@ pnpm install --frozen-lockfile
 # Written as an if rather than a test-and-exit one-liner: a project with no post-install step ends
 # on this line, and a false test would leave the script exiting 1, failing postCreateCommand.
 if [ "${1:-}" = "--install" ]; then exit 0; fi
+pnpm prisma:initialize

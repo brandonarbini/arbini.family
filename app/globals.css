@@ -1,1 +1,178 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/**
+ * Neutral greys with one warm accent. The board is mostly names, dates and places — dense, and
+ * read at a glance — so colour is spent on the few things worth looking for rather than spread
+ * across the surface. Per-person accents come from `Profile.color`, not from these tokens.
+ */
+:root {
+  /* Square. Rounded corners are the loudest modern signal after the cards themselves, and print
+     has no equivalent — a rule meets a rule at a right angle. */
+  --radius: 0rem;
+
+  /* Paper, not white. A warm off-white ground; pure white reads as a screen, never as a page. */
+  --background: oklch(0.975 0.008 85);
+  --foreground: oklch(0.2 0.012 60);
+  --card: oklch(0.975 0.008 85);
+  --card-foreground: oklch(0.2 0.012 60);
+  --popover: oklch(0.975 0.008 85);
+  --popover-foreground: oklch(0.2 0.012 60);
+
+  /* A deeper, less orange red than the previous terracotta — closer to a press spot colour. */
+  --primary: oklch(0.5 0.17 32);
+  --primary-foreground: oklch(0.98 0.008 85);
+  --secondary: oklch(0.94 0.01 85);
+  --secondary-foreground: oklch(0.2 0.012 60);
+  --muted: oklch(0.94 0.01 85);
+
+  /* Darker than a modern UI's muted grey. Print secondary text is still ink; it gets its
+     hierarchy from size and case, not from fading toward the background. */
+  --muted-foreground: oklch(0.44 0.015 65);
+  --accent: oklch(0.94 0.01 85);
+  --accent-foreground: oklch(0.2 0.012 60);
+  --destructive: oklch(0.5 0.19 27);
+  --destructive-foreground: oklch(0.98 0.008 85);
+  --success: oklch(0.45 0.11 150);
+  --success-foreground: oklch(0.98 0.008 85);
+
+  /* An actual rule, in ink. The old value was a 92%-light grey — a hairline designed to be almost
+     invisible so a box could recede. A press rule is meant to be seen; hierarchy comes from
+     varying its weight, not from fading it out. */
+  --border: oklch(0.55 0.02 70);
+  --input: oklch(0.55 0.02 70);
+  --ring: oklch(0.5 0.17 32);
+  --paper-grain: 0.055;
+}
+
+.dark {
+  /* Ink ground with warm off-white type. "Paper" has no dark equivalent, so dark mode inverts the
+     relationship rather than the palette — the warmth stays on the type instead of the ground. */
+  --background: oklch(0.16 0.008 60);
+  --foreground: oklch(0.94 0.008 85);
+  --card: oklch(0.16 0.008 60);
+  --card-foreground: oklch(0.94 0.008 85);
+  --popover: oklch(0.16 0.008 60);
+  --popover-foreground: oklch(0.94 0.008 85);
+  --primary: oklch(0.62 0.17 32);
+  --primary-foreground: oklch(0.98 0.008 85);
+  --secondary: oklch(0.24 0.01 60);
+  --secondary-foreground: oklch(0.94 0.008 85);
+  --muted: oklch(0.24 0.01 60);
+  --muted-foreground: oklch(0.7 0.014 75);
+  --accent: oklch(0.24 0.01 60);
+  --accent-foreground: oklch(0.94 0.008 85);
+  --destructive: oklch(0.62 0.19 27);
+  --destructive-foreground: oklch(0.98 0.008 85);
+  --success: oklch(0.68 0.13 150);
+  --success-foreground: oklch(0.16 0.008 60);
+  --border: oklch(0.48 0.016 72);
+  --input: oklch(0.48 0.016 72);
+  --ring: oklch(0.62 0.17 32);
+  --paper-grain: 0.03;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-copy: ui-serif, Georgia, "Times New Roman", serif;
+
+  /* Flat rather than derived: calc() off a zero base produces negative lengths. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /**
+   * Paper grain.
+   *
+   * An inline SVG `feTurbulence` rather than an image: nothing to download, nothing to fail
+   * offline, and it tiles at any viewport without a seam. Painted by a fixed pseudo-element so it
+   * does not repaint on scroll and does not enter the content flow — `pointer-events: none` keeps
+   * it from swallowing a single click.
+   *
+   * The strength is a token because noise reads far more strongly on a dark ground than a light
+   * one; a single opacity that is subtle on paper is dirt on ink.
+   */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--paper-grain);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+}
+
+/**
+ * Three faces, each with one job.
+ *
+ * The families are written into the utilities rather than declared as `--font-*` theme keys.
+ * Tailwind derives a `font-<name>` utility from every key in that namespace, so a `--font-logo`
+ * key and an `@utility font-logo` claim the same class name — and when they collide Tailwind
+ * emits neither, which shows up as the wordmark silently falling back to the system sans.
+ *
+ * `luke-variable` is the logo and nothing else — the family's name, and only where it acts as the
+ * wordmark. It is a variable font, but its axes are FILL and LINE (each 100–300) rather than
+ * `wght`, read from the font's own fvar table. Weight is therefore the one thing it cannot do, so
+ * `font-weight: 400` is pinned: without it a wordmark inheriting `font-medium` would be smeared
+ * into a fake semibold the designer never drew.
+ *
+ * The axes are custom properties rather than literals, so a call site can tune the face with
+ * `style={{ "--logo-fill": 140 }}` instead of needing a second utility class.
+ */
+@utility font-logo {
+  font-family: "luke-variable", var(--font-geist-sans), sans-serif;
+  font-variation-settings:
+    "FILL" var(--logo-fill, 270),
+    "LINE" var(--logo-line, 200);
+  font-weight: 400;
+}
+
+/**
+ * `p22-stickley-pro-headline` carries the headlines — page titles and the countdown. The kit
+ * publishes it at a single weight of 500, so that is pinned here for the same reason as above:
+ * anything bolder would be synthesised rather than drawn.
+ *
+ * Body and interface text stay on Geist, where a real weight range actually exists and bold means
+ * something.
+ */
+@utility font-headline {
+  font-family: "p22-stickley-pro-headline", ui-serif, Georgia, serif;
+  font-weight: 500;
+  font-style: normal;
+}
