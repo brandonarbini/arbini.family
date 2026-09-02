@@ -142,22 +142,33 @@ enum FamilyRole {
 
 // Family facts kept out of `User`, which Better Auth owns and reshapes across upgrades.
 model Profile {
-  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String     @unique @map("user_id") @db.Uuid
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      FamilyRole
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String     @unique @map("user_id") @db.Uuid
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           FamilyRole
   // A calendar date, not an instant: a birthday is the same day everywhere. Read through
   // `calendarDateFromDbDate` in `lib/dates.ts`, never by formatting the column directly.
-  birthday  DateTime?  @db.Date
-  phone     String?
+  birthday       DateTime?  @db.Date
+  phone          String?
   // Accent colour for this person across the board, so a row is identifiable at a glance.
-  color     String?
-  sortOrder Int        @map("sort_order")
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  color          String?
+  sortOrder      Int        @map("sort_order")
+  // Where this person lives when nothing says otherwise.
+  //
+  // The board treats an unrecorded day as *unknown* rather than assuming home, because an
+  // inferred default would make the gathering countdown confidently wrong. A declared default is
+  // not an inference: it is this person stating where they reside, so `locationsOn` may fall back
+  // to it. Null keeps the old behaviour — unknown stays unknown.
+  //
+  // Restrict, matching Stay: deleting a place must not silently strip four people of their home.
+  defaultPlaceId String?    @map("default_place_id") @db.Uuid
+  defaultPlace   Place?     @relation(fields: [defaultPlaceId], references: [id], onDelete: Restrict)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
   stays Stay[]
 
+  @@index([defaultPlaceId])
   @@map("profiles")
 }
 
@@ -177,7 +188,9 @@ model Place {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  stays Stay[]
+  stays     Stay[]
+  // People who live here. See `Profile.defaultPlaceId`.
+  residents Profile[]
 
   @@map("places")
 }

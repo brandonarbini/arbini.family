@@ -77,7 +77,7 @@ function Presence({ board }: { board: Board }) {
         </p>
       ) : (
         <RuledList>
-          {board.presence.map(({ member, place, until }) => (
+          {board.presence.map(({ member, place, until, isDefault }) => (
             <li
               key={member.profileId}
               className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
@@ -87,7 +87,14 @@ function Presence({ board }: { board: Board }) {
               <span className="font-copy ml-auto text-right text-base text-muted-foreground">
                 {place ? (
                   <>
-                    {place.name}
+                    {/*
+                      A place somebody lives is set a shade back from a place a stay put them.
+                      Both are known, so neither is italicised as "not recorded" — but only one of
+                      them is news, and the row should read as news where there is some.
+                    */}
+                    <span className={isDefault ? "opacity-70" : undefined}>
+                      {place.name}
+                    </span>
                     {until ? (
                       <span className="text-muted-foreground/70">
                         {" "}
@@ -98,7 +105,7 @@ function Presence({ board }: { board: Board }) {
                 ) : (
                   // Distinguished from "at home" on purpose: an unknown location is a gap in the
                   // data, and quietly defaulting it to home would make the gathering countdown
-                  // confidently wrong.
+                  // confidently wrong. A *declared* home is not a guess and resolves above.
                   <span className="italic">not recorded</span>
                 )}
               </span>

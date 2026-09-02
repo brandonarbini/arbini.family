@@ -21,6 +21,10 @@ function assertNotProduction(): void {
   }
 }
 
+/** Place names, used as the seed's join key: `Place.name` is unique, so it is a stable handle. */
+const HOME = "Home";
+const VANGUARD = "Vanguard";
+
 /**
  * The family.
  *
@@ -34,10 +38,15 @@ function assertNotProduction(): void {
  *
  * Each address must also appear in `FAMILY_EMAILS` or that person cannot sign in. The allowlist is
  * checked before any mail goes out, and a seeded account is not itself permission to enter.
+ *
+ * `livesAt` is where the board places somebody on a day no stay covers. Four of them live at home
+ * and Addison is on campus, which is the whole reason the column exists: without it the board asks
+ * everyone to record the days nothing is happening, and the answer to that request is silence.
  */
 const FAMILY = [
   {
     email: "b@arbini.com",
+    livesAt: HOME,
     name: "Brandon Arbini",
     role: FamilyRole.PARENT,
     sortOrder: 0,
@@ -46,6 +55,7 @@ const FAMILY = [
   },
   {
     email: "jill@arbini.com",
+    livesAt: HOME,
     name: "Jill Arbini",
     role: FamilyRole.PARENT,
     sortOrder: 10,
@@ -54,6 +64,7 @@ const FAMILY = [
   },
   {
     email: "tanner@arbini.com",
+    livesAt: HOME,
     name: "Tanner Arbini",
     role: FamilyRole.KID,
     sortOrder: 20,
@@ -62,6 +73,7 @@ const FAMILY = [
   },
   {
     email: "addison@arbini.com",
+    livesAt: VANGUARD,
     name: "Addison Arbini",
     role: FamilyRole.KID,
     sortOrder: 30,
@@ -70,6 +82,7 @@ const FAMILY = [
   },
   {
     email: "macy@arbini.com",
+    livesAt: HOME,
     name: "Macy Arbini",
     role: FamilyRole.KID,
     sortOrder: 40,
@@ -79,16 +92,28 @@ const FAMILY = [
 ];
 
 /**
- * The one place everyone comes back to. `Place.isHome` is what the board leans on to tell "at
- * home" from "away", and the schema asks for exactly one row carrying it — so it is seeded here
- * rather than left to be created by hand.
+ * The places the family reckons from.
+ *
+ * `Place.isHome` is what the board leans on to tell "at home" from "away", and the schema asks for
+ * exactly one row carrying it — so it is seeded here rather than left to be created by hand.
+ *
+ * Vanguard is seeded alongside it because Addison lives there, and a default place that does not
+ * exist yet is not a default. Both are upserts keyed on `name`, which is unique.
  */
-async function seedHome() {
-  return prisma.place.upsert({
-    where: { name: "Home" },
-    update: {},
-    create: { name: "Home", isHome: true },
-  });
+async function seedPlaces(): Promise<Map<string, string>> {
+  const places = await Promise.all([
+    prisma.place.upsert({
+      where: { name: HOME },
+      update: {},
+      create: { name: HOME, isHome: true },
+    }),
+    prisma.place.upsert({
+      where: { name: VANGUARD },
+      update: {},
+      create: { name: VANGUARD, address: "Vanguard University, Costa Mesa" },
+    }),
+  ]);
+  return new Map(places.map((place) => [place.name, place.id]));
 }
 
 /**
@@ -98,8 +123,10 @@ async function seedHome() {
  * `emailVerified` is true because the address is one we put in the allowlist ourselves, not one
  * somebody claimed at sign-up.
  */
-async function seedFamily() {
+async function seedFamily(placeIds: Map<string, string>) {
   for (const person of FAMILY) {
+    const defaultPlaceId = placeIds.get(person.livesAt) ?? null;
+
     const user = await prisma.user.upsert({
       where: { email: person.email },
       update: {},
@@ -114,6 +141,7 @@ async function seedFamily() {
         role: person.role,
         sortOrder: person.sortOrder,
         color: person.color,
+        defaultPlaceId,
         birthday: person.birthday
           ? new Date(`${person.birthday}T00:00:00Z`)
           : null,
@@ -123,6 +151,7 @@ async function seedFamily() {
         role: person.role,
         sortOrder: person.sortOrder,
         color: person.color,
+        defaultPlaceId,
         birthday: person.birthday
           ? new Date(`${person.birthday}T00:00:00Z`)
           : null,
@@ -133,10 +162,10 @@ async function seedFamily() {
 
 async function main() {
   assertNotProduction();
-  const home = await seedHome();
-  await seedFamily();
+  const placeIds = await seedPlaces();
+  await seedFamily(placeIds);
   console.log(
-    `Seeded ${FAMILY.length} family member(s) and the place "${home.name}".`,
+    `Seeded ${FAMILY.length} family member(s) and ${placeIds.size} place(s): ${[...placeIds.keys()].join(", ")}.`,
   );
 }
 

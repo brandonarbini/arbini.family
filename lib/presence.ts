@@ -16,7 +16,29 @@ import {
  *
  * These functions take plain objects rather than Prisma rows so the logic is testable without a
  * database — the caller maps rows to `StayWindow` at the boundary.
+ *
+ * ## Declared defaults
+ *
+ * Most of this family lives at home and only a couple of them go anywhere, so requiring a stay for
+ * every ordinary day would mean recording nothing but the absence of news. `locationsOn` and
+ * `findNextGathering` therefore accept an optional map of *declared* defaults — `Profile.
+ * defaultPlaceId`, where somebody resides — and fall back to it on days no stay covers.
+ *
+ * This is not the board quietly assuming everyone is home. That assumption is exactly what the
+ * "not recorded" state exists to prevent, because a countdown built on a guess is wrong in the
+ * one case anybody would act on. A declared default is data: a person said where they live. The
+ * distinction being preserved is *we know* versus *we don't* — not *recorded* versus *unrecorded*.
+ * A profile with no default still resolves to `null`, and `findNextGathering` still declines to
+ * report a gathering while anybody is unknown.
+ *
+ * The parameter is optional, so a caller that passes nothing gets the old behaviour exactly.
  */
+
+/**
+ * Where each person lives when no stay says otherwise. Keyed by profile id; a `null` value is a
+ * person with no declared home, which resolves to unknown rather than to anywhere.
+ */
+export type DefaultPlaces = ReadonlyMap<string, string | null>;
 
 export interface StayWindow {
   profileId: string;
@@ -55,22 +77,26 @@ export function stayCoversDate(stay: StayWindow, date: CalendarDate): boolean {
 }
 
 /**
- * Each profile's place on a given day, or `null` where nothing is recorded.
+ * Each profile's place on a given day, or `null` where nothing is recorded and no default applies.
  *
  * Overlapping stays for one person are a data error the UI should prevent, but the board still
  * has to render something when it happens. The most recently started stay wins, on the theory
  * that it is the more recent statement of intent; exact `startsOn` ties are broken by input
  * order, so callers ordering by `createdAt` get last-write-wins.
+ *
+ * A stay always beats the default — being somewhere is a statement about a specific day, and a
+ * default is a statement about ordinary ones.
  */
 export function locationsOn(
   stays: readonly StayWindow[],
   profileIds: readonly string[],
   date: CalendarDate,
+  defaults?: DefaultPlaces,
 ): Map<string, string | null> {
   return new Map(
     Array.from(staysOn(stays, profileIds, date), ([profileId, stay]) => [
       profileId,
-      stay?.placeId ?? null,
+      stay?.placeId ?? defaults?.get(profileId) ?? null,
     ]),
   );
 }
@@ -127,6 +153,7 @@ export function findNextGathering(
   profileIds: readonly string[],
   from: CalendarDate,
   horizonDays = 365,
+  defaults?: DefaultPlaces,
 ): Gathering | null {
   // Vacuously true is the wrong answer here: with nobody to gather, there is no gathering. The
   // `shared !== null` test below already declines to report one, so this is an explicit statement
@@ -141,7 +168,7 @@ export function findNextGathering(
     start,
     addCalendarDays(start, horizonDays),
   )) {
-    const places = locationsOn(stays, profileIds, day);
+    const places = locationsOn(stays, profileIds, day, defaults);
     let shared: string | null = null;
     let together = true;
 

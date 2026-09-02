@@ -294,3 +294,91 @@ describe("upcomingTransitions", () => {
     expect(first.map((t) => t.profileId)).toEqual(["ellie", "tanner"]);
   });
 });
+
+/**
+ * The declared-default fallback.
+ *
+ * The tests above pass `defaults` nowhere, which is the point: they are the proof the parameter is
+ * genuinely optional and that adding it changed nothing for callers that do not use it.
+ */
+describe("declared defaults", () => {
+  const livesAt = (overrides: Record<string, string | null> = {}) =>
+    new Map<string, string | null>(
+      FAMILY.map((profileId) => [
+        profileId,
+        profileId in overrides ? overrides[profileId] : HOME,
+      ]),
+    );
+
+  it("places someone at their default on a day no stay covers", () => {
+    const places = locationsOn([], FAMILY, "2026-11-20", livesAt());
+    expect(places.get("ellie")).toBe(HOME);
+  });
+
+  it("lets a covering stay beat the default", () => {
+    // Being somewhere is a statement about a specific day; a default is a statement about
+    // ordinary ones, so the specific one has to win or a recorded trip would be invisible.
+    const places = locationsOn(
+      [stay("ellie", GRANDMA, "2026-11-20", "2026-11-22")],
+      FAMILY,
+      "2026-11-21",
+      livesAt(),
+    );
+    expect(places.get("ellie")).toBe(GRANDMA);
+    expect(places.get("nico")).toBe(HOME);
+  });
+
+  it("falls back to the default again once the stay ends", () => {
+    const stays = [stay("ellie", GRANDMA, "2026-11-20", "2026-11-22")];
+    expect(
+      locationsOn(stays, FAMILY, "2026-11-23", livesAt()).get("ellie"),
+    ).toBe(HOME);
+  });
+
+  it("still reports null for someone with no declared home", () => {
+    // The whole distinction this feature rests on: a person who has not said where they live is
+    // unknown, not assumed to be anywhere. Only a *declared* default resolves.
+    const places = locationsOn(
+      [],
+      FAMILY,
+      "2026-11-20",
+      livesAt({ nico: null }),
+    );
+    expect(places.get("nico")).toBeNull();
+    expect(places.get("ellie")).toBe(HOME);
+  });
+
+  it("finds no gathering while one person lives somewhere else", () => {
+    // Four at home and Addison on campus: the board's resting state, and correctly not a
+    // gathering. A default that resolved everyone to home would report one every single day.
+    expect(
+      findNextGathering(
+        [],
+        FAMILY,
+        "2026-11-20",
+        30,
+        livesAt({ ellie: SCHOOL }),
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the gathering on the day the one away person comes home", () => {
+    expect(
+      findNextGathering(
+        [stay("ellie", HOME, "2026-11-25", "2026-11-29")],
+        FAMILY,
+        "2026-11-20",
+        30,
+        livesAt({ ellie: SCHOOL }),
+      ),
+    ).toEqual({ date: "2026-11-25", placeId: HOME });
+  });
+
+  it("still declines to report a gathering while anybody is unknown", () => {
+    // `null` default plus no stay is a gap in the data, and a countdown built on a gap is wrong
+    // in exactly the case somebody would act on it.
+    expect(
+      findNextGathering([], FAMILY, "2026-11-20", 30, livesAt({ nico: null })),
+    ).toBeNull();
+  });
+});

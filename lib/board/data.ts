@@ -57,6 +57,8 @@ export interface FamilyMember {
   role: FamilyRole;
   color: string | null;
   birthday: CalendarDate | null;
+  /** Where they are on a day no stay covers. `null` means unknown rather than anywhere. */
+  defaultPlaceId: string | null;
   sortOrder: number;
 }
 
@@ -81,6 +83,7 @@ export async function getFamilyMembers(): Promise<FamilyMember[]> {
       role: true,
       color: true,
       birthday: true,
+      defaultPlaceId: true,
       sortOrder: true,
       // Only what the board renders. The user row carries auth-adjacent columns that have no
       // business crossing into a client component.
@@ -99,6 +102,7 @@ export async function getFamilyMembers(): Promise<FamilyMember[]> {
     birthday: profile.birthday
       ? calendarDateFromDbDate(profile.birthday)
       : null,
+    defaultPlaceId: profile.defaultPlaceId,
     sortOrder: profile.sortOrder,
   }));
 }
