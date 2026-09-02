@@ -14,7 +14,20 @@ services:
         required: false
     command: sleep infinity
 
+    network_mode: service:db
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - postgres-17-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+
 volumes:
+  postgres-17-data:
   pnpm-store:
     external: true
     name: pnpm-store-shared

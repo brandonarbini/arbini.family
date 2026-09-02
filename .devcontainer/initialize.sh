@@ -30,7 +30,7 @@ if [ -n "$OWN_CONTAINER" ]; then
   OWN_PROJECT="$(docker inspect "$OWN_CONTAINER" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
 fi
 PORT_CONFLICT=""
-for CHECK_PORT in $APP_PORT $FALLBACK_PORT; do
+for CHECK_PORT in $APP_PORT $FALLBACK_PORT $PG_PORT $STUDIO_PORT $EMAIL_PORT; do
   # A heredoc rather than a pipe: the loop must run in this shell so PORT_CONFLICT survives it.
   while IFS=' ' read -r BUSY_NAME BUSY_PROJECT; do
     [ -n "$BUSY_NAME" ] || continue
@@ -64,9 +64,13 @@ services:
     environment:
       PORT: "$APP_PORT"
 ${COMMON_MOUNT}
+  db:
     ports:
       - "$APP_PORT:$APP_PORT"
       - "$FALLBACK_PORT:3000"
+      - "$PG_PORT:5432"
+      - "$STUDIO_PORT:$STUDIO_PORT"
+      - "$EMAIL_PORT:3001"
 EOF
 
 # The file above is rewritten on every run, but `devcontainer up` starts an already-created
@@ -88,7 +92,7 @@ if [ -n "$OWN_PROJECT" ]; then
     PUBLISHED="$PUBLISHED $(docker inspect "$OWN_ID" --format '{{range $port, $bindings := .HostConfig.PortBindings}}{{range $bindings}}{{.HostPort}} {{end}}{{end}}' 2>/dev/null || true)"
   done
   STALE_PORTS=""
-  for WANT_PORT in $APP_PORT $FALLBACK_PORT; do
+  for WANT_PORT in $APP_PORT $FALLBACK_PORT $PG_PORT $STUDIO_PORT $EMAIL_PORT; do
     case " $PUBLISHED " in
       *" $WANT_PORT "*) ;;
       *) STALE_PORTS="$STALE_PORTS $WANT_PORT" ;;

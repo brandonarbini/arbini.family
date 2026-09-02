@@ -17,6 +17,7 @@
         "ms-azuretools.vscode-docker",
         "eamodio.gitlens",
         "bradlc.vscode-tailwindcss",
+        "Prisma.prisma",
         "Anthropic.claude-code"
       ]
     }
