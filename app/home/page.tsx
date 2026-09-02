@@ -100,7 +100,7 @@ function PresenceCard({ board }: { board: Board }) {
                 key={member.profileId}
                 className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
               >
-                <PersonBadge name={member.name} color={member.color} />
+                <PersonBadge name={member.name} />
                 <span className="font-medium">{member.name}</span>
                 <span className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
                   {place ? (

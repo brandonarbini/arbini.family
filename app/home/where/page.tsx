@@ -46,11 +46,7 @@ export default async function WherePage() {
         <Card key={member.profileId}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <PersonBadge
-                name={member.name}
-                color={member.color}
-                className="size-5 text-[10px]"
-              />
+              <PersonBadge name={member.name} size={24} />
               {member.name}
             </CardTitle>
           </CardHeader>
