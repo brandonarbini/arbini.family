@@ -5,7 +5,9 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card text-card-foreground shadow-sm",
+        // No shadow and no fill: the card sits on the page rather than floating above it, so
+        // the border reads as a ruled box the way a boxed item in print would.
+        "border bg-card text-card-foreground",
         className,
       )}
       {...props}

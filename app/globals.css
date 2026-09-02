@@ -9,62 +9,78 @@
  * across the surface. Per-person accents come from `Profile.color`, not from these tokens.
  */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.646 0.156 45.5);
-  --primary-foreground: oklch(0.99 0.01 60);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.52 0.13 152.5);
-  --success-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.646 0.156 45.5);
+  /* Square. Rounded corners are the loudest modern signal after the cards themselves, and print
+     has no equivalent — a rule meets a rule at a right angle. */
+  --radius: 0rem;
+
+  /* Paper, not white. A warm off-white ground; pure white reads as a screen, never as a page. */
+  --background: oklch(0.975 0.008 85);
+  --foreground: oklch(0.2 0.012 60);
+  --card: oklch(0.975 0.008 85);
+  --card-foreground: oklch(0.2 0.012 60);
+  --popover: oklch(0.975 0.008 85);
+  --popover-foreground: oklch(0.2 0.012 60);
+
+  /* A deeper, less orange red than the previous terracotta — closer to a press spot colour. */
+  --primary: oklch(0.5 0.17 32);
+  --primary-foreground: oklch(0.98 0.008 85);
+  --secondary: oklch(0.94 0.01 85);
+  --secondary-foreground: oklch(0.2 0.012 60);
+  --muted: oklch(0.94 0.01 85);
+
+  /* Darker than a modern UI's muted grey. Print secondary text is still ink; it gets its
+     hierarchy from size and case, not from fading toward the background. */
+  --muted-foreground: oklch(0.44 0.015 65);
+  --accent: oklch(0.94 0.01 85);
+  --accent-foreground: oklch(0.2 0.012 60);
+  --destructive: oklch(0.5 0.19 27);
+  --destructive-foreground: oklch(0.98 0.008 85);
+  --success: oklch(0.45 0.11 150);
+  --success-foreground: oklch(0.98 0.008 85);
+
+  /* An actual rule, in ink. The old value was a 92%-light grey — a hairline designed to be almost
+     invisible so a box could recede. A press rule is meant to be seen; hierarchy comes from
+     varying its weight, not from fading it out. */
+  --border: oklch(0.55 0.02 70);
+  --input: oklch(0.55 0.02 70);
+  --ring: oklch(0.5 0.17 32);
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.72 0.15 45.5);
-  --primary-foreground: oklch(0.21 0.03 45);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.75 0.15 152.5);
-  --success-foreground: oklch(0.21 0.006 285.885);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.72 0.15 45.5);
+  /* Ink ground with warm off-white type. "Paper" has no dark equivalent, so dark mode inverts the
+     relationship rather than the palette — the warmth stays on the type instead of the ground. */
+  --background: oklch(0.16 0.008 60);
+  --foreground: oklch(0.94 0.008 85);
+  --card: oklch(0.16 0.008 60);
+  --card-foreground: oklch(0.94 0.008 85);
+  --popover: oklch(0.16 0.008 60);
+  --popover-foreground: oklch(0.94 0.008 85);
+  --primary: oklch(0.62 0.17 32);
+  --primary-foreground: oklch(0.98 0.008 85);
+  --secondary: oklch(0.24 0.01 60);
+  --secondary-foreground: oklch(0.94 0.008 85);
+  --muted: oklch(0.24 0.01 60);
+  --muted-foreground: oklch(0.7 0.014 75);
+  --accent: oklch(0.24 0.01 60);
+  --accent-foreground: oklch(0.94 0.008 85);
+  --destructive: oklch(0.62 0.19 27);
+  --destructive-foreground: oklch(0.98 0.008 85);
+  --success: oklch(0.68 0.13 150);
+  --success-foreground: oklch(0.16 0.008 60);
+  --border: oklch(0.48 0.016 72);
+  --input: oklch(0.48 0.016 72);
+  --ring: oklch(0.62 0.17 32);
 }
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Flat rather than derived: calc() off a zero base produces negative lengths. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
