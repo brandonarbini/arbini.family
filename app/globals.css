@@ -60,7 +60,6 @@
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
-  --font-display: "luke-variable", var(--font-geist-sans), sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -100,25 +99,40 @@
 }
 
 /**
- * The headline face.
+ * Three faces, each with one job.
  *
- * `luke-variable` is a variable font, but its axes are FILL and LINE (each 100–300), not `wght` —
- * confirmed from the font's own fvar table. So weight is the one thing it cannot do: a
- * `font-semibold` on this face is synthesised by the browser, not drawn by the designer. That,
- * rather than any limit on the kit, is why it stays on headlines and Geist carries body and
- * interface text, where bold actually means something.
+ * The families are written into the utilities rather than declared as `--font-*` theme keys.
+ * Tailwind derives a `font-<name>` utility from every key in that namespace, so a `--font-logo`
+ * key and an `@utility font-logo` claim the same class name — and when they collide Tailwind
+ * emits neither, which shows up as the wordmark silently falling back to the system sans.
  *
- * `font-weight: 400` is pinned for the same reason: without it a heading inheriting `font-medium`
- * from a parent would be smeared into a fake semibold.
+ * `luke-variable` is the logo and nothing else — the family's name, and only where it acts as the
+ * wordmark. It is a variable font, but its axes are FILL and LINE (each 100–300) rather than
+ * `wght`, read from the font's own fvar table. Weight is therefore the one thing it cannot do, so
+ * `font-weight: 400` is pinned: without it a wordmark inheriting `font-medium` would be smeared
+ * into a fake semibold the designer never drew.
  *
- * The axes are exposed as custom properties rather than hardcoded, so a call site can tune the
- * face — `style={{ "--display-fill": 140 }}` — without a second utility class. The defaults are
- * the intended setting.
+ * The axes are custom properties rather than literals, so a call site can tune the face with
+ * `style={{ "--logo-fill": 140 }}` instead of needing a second utility class.
  */
-@utility font-display {
-  font-family: var(--font-display);
+@utility font-logo {
+  font-family: "luke-variable", var(--font-geist-sans), sans-serif;
   font-variation-settings:
-    "FILL" var(--display-fill, 270),
-    "LINE" var(--display-line, 200);
+    "FILL" var(--logo-fill, 270),
+    "LINE" var(--logo-line, 200);
   font-weight: 400;
+}
+
+/**
+ * `p22-stickley-pro-headline` carries the headlines — page titles and the countdown. The kit
+ * publishes it at a single weight of 500, so that is pinned here for the same reason as above:
+ * anything bolder would be synthesised rather than drawn.
+ *
+ * Body and interface text stay on Geist, where a real weight range actually exists and bold means
+ * something.
+ */
+@utility font-headline {
+  font-family: "p22-stickley-pro-headline", ui-serif, Georgia, serif;
+  font-weight: 500;
+  font-style: normal;
 }

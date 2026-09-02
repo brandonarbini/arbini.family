@@ -66,7 +66,7 @@ function GatheringCard({ board }: { board: Board }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="font-display text-3xl">
+        <p className="font-headline text-3xl">
           {inDays === 0
             ? "Everyone's together today"
             : inDays === 1

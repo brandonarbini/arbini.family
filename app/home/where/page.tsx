@@ -15,7 +15,7 @@ export default async function WherePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl">Where I am</h1>
+        <h1 className="font-headline text-3xl">Where I am</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           A stay is a place and a stretch of days. The board works everything
           out from these.

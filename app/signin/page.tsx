@@ -24,7 +24,7 @@ export default async function SignInPage({
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-sm">
-        <h1 className="font-display text-center text-5xl leading-none sm:text-6xl">
+        <h1 className="font-logo text-center text-5xl leading-none sm:text-6xl">
           Arbini Family
         </h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">

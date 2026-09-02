@@ -27,7 +27,7 @@ export function AppShell({
         <div className="mx-auto max-w-3xl px-6 py-8">
           <Link
             href="/home"
-            className="font-display block text-center text-5xl leading-none sm:text-6xl"
+            className="font-logo block text-center text-5xl leading-none sm:text-6xl"
           >
             Arbini Family
           </Link>

@@ -12,7 +12,7 @@ export default async function LandingPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-6">
-      <h1 className="font-display text-6xl leading-none sm:text-7xl">
+      <h1 className="font-logo text-6xl leading-none sm:text-7xl">
         Arbini Family
       </h1>
       <Button asChild>

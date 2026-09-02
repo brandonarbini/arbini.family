@@ -46,7 +46,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/*
-          The Typekit headline face. A <link> rather than an @import in globals.css: an @import
+          The Typekit faces — Luke for the wordmark, Stickley for headlines. A <link> rather
+          than an @import in globals.css: an @import
           cannot start downloading until the importing stylesheet has been fetched and parsed,
           which puts the font one full round trip further back. preconnect opens the connection
           alongside that request instead of after it.
