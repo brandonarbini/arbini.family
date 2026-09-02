@@ -38,11 +38,15 @@ const MIN_STRIP_DAYS = 14;
 
 export function PollForm({
   today,
+  places,
   defaultTitle,
+  defaultPlaceId,
   defaultDays,
 }: {
   today: string;
+  places: { id: string; name: string; isHome: boolean }[];
   defaultTitle?: string;
+  defaultPlaceId?: string | null;
   /** Pre-selected days, used by "Ask again" to re-run last week's poll shifted forward. */
   defaultDays?: string[];
 }) {
@@ -85,6 +89,32 @@ export function PollForm({
         />
         <FieldError message={fieldError(state, "title")} />
       </div>
+
+      {/*
+        Optional, and last in the tab order before the days, because the answer is "home" almost
+        every time. It exists because settling writes a stay, and a stay needs somewhere to be —
+        a "Beach day?" poll that quietly recorded everyone at home would be worse than useless.
+      */}
+      {places.length > 1 ? (
+        <div>
+          <Label htmlFor="placeId">Where?</Label>
+          <select
+            id="placeId"
+            name="placeId"
+            defaultValue={defaultPlaceId ?? ""}
+            className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">Home</option>
+            {places
+              .filter((place) => !place.isHome)
+              .map((place) => (
+                <option key={place.id} value={place.id}>
+                  {place.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      ) : null}
 
       <div>
         <span className="text-sm font-medium">Which days?</span>

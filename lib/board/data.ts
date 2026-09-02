@@ -282,6 +282,9 @@ export interface BoardPoll {
   id: string;
   title: string;
   status: PollStatus;
+  /** Where the gathering is. Null means home, resolved when the poll settles. */
+  placeId: string | null;
+  placeName: string | null;
   settledOptionId: string | null;
   createdById: string | null;
   createdByName: string | null;
@@ -350,6 +353,8 @@ const POLL_SELECT = {
   id: true,
   title: true,
   status: true,
+  placeId: true,
+  place: { select: { name: true } },
   settledOptionId: true,
   createdById: true,
   createdBy: { select: { name: true } },
@@ -382,6 +387,8 @@ function toBoardPoll(poll: PollRow): BoardPoll {
     id: poll.id,
     title: poll.title,
     status: poll.status,
+    placeId: poll.placeId,
+    placeName: poll.place?.name ?? null,
     settledOptionId: poll.settledOptionId,
     createdById: poll.createdById,
     createdByName: poll.createdBy?.name ?? null,

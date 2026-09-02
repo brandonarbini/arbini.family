@@ -1,6 +1,6 @@
 import { PollForm } from "@/app/polls/new/poll-form";
 import { requireProfile } from "@/lib/auth-helpers";
-import { getPoll } from "@/lib/board/data";
+import { getPlaces, getPoll } from "@/lib/board/data";
 import { addCalendarDays, todayInFamilyTz } from "@/lib/dates";
 
 export const metadata = { title: "Start a poll — Arbini Family" };
@@ -24,7 +24,10 @@ export default async function NewPollPage({
   // "Ask again": last week's poll shifted forward seven days. The recurring question in a family
   // where somebody is away at school is the same question every week, and re-typing it every
   // Sunday is exactly the friction that ends the habit.
-  const previous = from ? await getPoll(from) : null;
+  const [places, previous] = await Promise.all([
+    getPlaces(),
+    from ? getPoll(from) : null,
+  ]);
   const repeated = previous?.options
     .map((option) => addCalendarDays(option.startsOn, 7))
     // A shifted day that has already passed is dropped rather than offered.
@@ -45,7 +48,9 @@ export default async function NewPollPage({
 
       <PollForm
         today={today}
+        places={places}
         defaultTitle={previous?.title}
+        defaultPlaceId={previous?.placeId}
         defaultDays={repeated}
       />
     </div>

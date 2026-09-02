@@ -382,3 +382,34 @@ describe("declared defaults", () => {
     ).toBeNull();
   });
 });
+
+describe("upcomingTransitions on a single day", () => {
+  it("reports an arrival and no departure for a day visit", () => {
+    // Settling a poll writes a stay with matching dates for whoever has to travel, so this is the
+    // ordinary shape now. Two lines for one visit reads as a glitch.
+    expect(
+      upcomingTransitions(
+        [stay("ellie", HOME, "2026-11-20", "2026-11-20")],
+        "2026-11-18",
+        30,
+      ),
+    ).toEqual([
+      {
+        kind: "arrival",
+        date: "2026-11-20",
+        profileId: "ellie",
+        placeId: HOME,
+      },
+    ]);
+  });
+
+  it("still reports both ends of a stay longer than a day", () => {
+    expect(
+      upcomingTransitions(
+        [stay("ellie", HOME, "2026-11-20", "2026-11-21")],
+        "2026-11-18",
+        30,
+      ).map((transition) => transition.kind),
+    ).toEqual(["arrival", "departure"]);
+  });
+});

@@ -193,6 +193,7 @@ model Place {
   stays     Stay[]
   // People who live here. See `Profile.defaultPlaceId`.
   residents Profile[]
+  polls     Poll[]
 
   @@map("places")
 }
@@ -214,12 +215,21 @@ model Stay {
   startsOn  DateTime  @map("starts_on") @db.Date
   endsOn    DateTime? @map("ends_on") @db.Date
   note      String?
+  // Set when this stay was written by settling a poll rather than typed by a person.
+  //
+  // Cascade, unlike `Event.createdById`'s SetNull just below — and the difference is the point.
+  // That column is about *attribution* surviving its author; this one marks a row that is
+  // *derived*, and a derived row must not outlive the thing it was derived from. Deleting a poll
+  // says the plan is off, so the travel it arranged goes with it.
+  pollId    String?   @map("poll_id") @db.Uuid
+  poll      Poll?     @relation(fields: [pollId], references: [id], onDelete: Cascade)
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   // Covers both the per-person lookup and the board's window scan over upcoming dates.
   @@index([profileId, startsOn])
   @@index([startsOn])
+  @@index([pollId])
   @@map("stays")
 }
 
@@ -236,10 +246,14 @@ model Event {
   // attribution for it.
   createdById String?  @map("created_by_id") @db.Uuid
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  // Set when settling a poll put this on the calendar. Cascade, for the reason on `Stay.pollId`.
+  pollId      String?  @map("poll_id") @db.Uuid
+  poll        Poll?    @relation(fields: [pollId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@index([date])
+  @@index([pollId])
   @@map("events")
 }
 
@@ -267,6 +281,13 @@ model Poll {
   title  String
   status PollStatus @default(OPEN)
 
+  // Where the gathering is, which settling needs in order to know what to write a stay *to*.
+  // Optional: most weekly polls are about the house, so the form defaults it to home and settling
+  // falls back to home when it is absent. Restrict matches Stay — deleting a place must not
+  // silently rewrite where the family agreed to meet.
+  placeId String? @map("place_id") @db.Uuid
+  place   Place?  @relation(fields: [placeId], references: [id], onDelete: Restrict)
+
   // The option the family landed on. Unique because an option can settle at most one poll, which
   // is what lets Prisma express this as a relation rather than a bare column with a hand-written
   // constraint. SetNull rather than Cascade: deleting one option must not silently un-settle a
@@ -283,6 +304,9 @@ model Poll {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   options PollOption[] @relation("PollOptions")
+  // Rows settling wrote. Cascade-deleted with the poll — see `Stay.pollId`.
+  stays   Stay[]
+  events  Event[]
 
   @@index([status, createdAt])
   @@map("polls")

@@ -42,6 +42,12 @@ const optionPair = z.string().transform((value, ctx) => {
 });
 
 export const createPollSchema = z.object({
+  // "" is an untouched select, which means "wherever home is" rather than "invalid" — settling
+  // resolves it. Normalizing here keeps that HTML detail out of the service.
+  placeId: z.preprocess(
+    (value) => (value === "" || value === undefined ? null : value),
+    z.uuid().nullable(),
+  ),
   title: z
     .string()
     .trim()

@@ -28,7 +28,10 @@ export interface OptionView {
   /** True when this is the option the family landed on. */
   isSettled: boolean;
   /**
-   * People who are somewhere other than home for any part of the option, and where.
+   * People who are somewhere other than *the gathering* for any part of the option, and where.
+   *
+   * Measured against the poll's own place, not against home. A "Beach day?" poll that reported
+   * everyone as present because they were all at home would be exactly backwards.
    *
    * The whole reason `Profile.defaultPlaceId` exists shows up here: four of the five are home by
    * default and their line is empty, but Addison is on campus, and nobody should propose a
@@ -39,6 +42,8 @@ export interface OptionView {
 
 export interface PollView {
   poll: BoardPoll;
+  /** Where the gathering resolves to — the poll's place, or home when it named none. */
+  gatheringPlace: Place | null;
   members: FamilyMember[];
   options: OptionView[];
   /** Best first, so whoever settles it does not have to read the counts. */
@@ -73,6 +78,12 @@ export async function getPollView(
   const stays = earliest ? await getStaysForWindow(earliest, 365) : [];
 
   const placesById = new Map(places.map((place) => [place.id, place]));
+  // The same fallback `settlePoll` applies, so what the ballot says about who is away and what
+  // settling actually writes cannot disagree.
+  const gatheringPlace =
+    (poll.placeId ? placesById.get(poll.placeId) : undefined) ??
+    places.find((place) => place.isHome) ??
+    null;
   const membersByProfileId = new Map(
     members.map((member) => [member.profileId, member]),
   );
@@ -92,8 +103,9 @@ export async function getPollView(
         defaults,
       )) {
         if (placeId === null || away.has(profileId)) continue;
+        if (gatheringPlace && placeId === gatheringPlace.id) continue;
         const place = placesById.get(placeId);
-        if (place && !place.isHome) away.set(profileId, place);
+        if (place) away.set(profileId, place);
       }
     }
 
@@ -115,6 +127,7 @@ export async function getPollView(
 
   return {
     poll,
+    gatheringPlace,
     members,
     options,
     ranked: rankOptions(tallies),

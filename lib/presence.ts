@@ -196,6 +196,12 @@ export function findNextGathering(
  *
  * An open-ended stay contributes an arrival and no departure — there is no date on which they
  * leave, so reporting one would be an invention.
+ *
+ * A stay that starts and ends on the same day contributes only an arrival. "Addison arrives at
+ * Home" and "Addison leaves Home" filed against one date is two lines for one visit, and it reads
+ * as a glitch rather than as detail. This used to be a rarity, because a stay somebody typed by
+ * hand is usually a trip; settling a poll writes one for every day the family agrees on, so the
+ * day visit is now the common case rather than the odd one.
  */
 export function upcomingTransitions(
   stays: readonly StayWindow[],
@@ -220,7 +226,11 @@ export function upcomingTransitions(
         placeId: stay.placeId,
       });
     }
-    if (stay.endsOn !== null && inWindow(stay.endsOn)) {
+    if (
+      stay.endsOn !== null &&
+      stay.endsOn !== stay.startsOn &&
+      inWindow(stay.endsOn)
+    ) {
       transitions.push({
         kind: "departure",
         date: stay.endsOn,
