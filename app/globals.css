@@ -102,17 +102,23 @@
 /**
  * The headline face.
  *
- * Scoped to display text rather than set on `body`, because the kit publishes a single 400 weight
- * — every `font-medium` and `font-semibold` in the interface would be synthetically emboldened,
- * which is exactly where a synthesised weight looks worst. Body and UI text stay on Geist.
+ * `luke-variable` is a variable font, but its axes are FILL and LINE (each 100–300), not `wght` —
+ * confirmed from the font's own fvar table. So weight is the one thing it cannot do: a
+ * `font-semibold` on this face is synthesised by the browser, not drawn by the designer. That,
+ * rather than any limit on the kit, is why it stays on headlines and Geist carries body and
+ * interface text, where bold actually means something.
  *
- * The variation settings are part of the face, not decoration: without them the axes sit at their
- * defaults and the type renders lighter and tighter than intended.
+ * `font-weight: 400` is pinned for the same reason: without it a heading inheriting `font-medium`
+ * from a parent would be smeared into a fake semibold.
+ *
+ * The axes are exposed as custom properties rather than hardcoded, so a call site can tune the
+ * face — `style={{ "--display-fill": 140 }}` — without a second utility class. The defaults are
+ * the intended setting.
  */
 @utility font-display {
   font-family: var(--font-display);
   font-variation-settings:
-    "FILL" 270,
-    "LINE" 200;
+    "FILL" var(--display-fill, 270),
+    "LINE" var(--display-line, 200);
   font-weight: 400;
 }

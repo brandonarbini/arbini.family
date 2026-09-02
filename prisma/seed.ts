@@ -24,20 +24,19 @@ function assertNotProduction(): void {
 /**
  * The family.
  *
- * Only the two accounts whose details are actually known are listed. The other three go here as
- * they are confirmed — this is deliberately not padded with invented names, because a seeded
- * placeholder is indistinguishable from a real person once it is in the database, and the board
- * would report a gathering that included someone who does not exist.
+ * `sortOrder` is the board's row order — parents first, then the kids. Gaps of ten so somebody can
+ * be slotted in without renumbering everyone.
  *
- * `sortOrder` is the board's row order. Leave gaps so somebody can be slotted in without
- * renumbering everyone.
+ * Birthdays are left null rather than guessed. The board derives every birthday from this column,
+ * so a wrong date here is a wrong date on the board every year until somebody notices; fill them
+ * in and re-run, and the upsert below will carry the change through.
  *
- * Each `email` must also appear in `FAMILY_EMAILS` or that person cannot sign in — the allowlist
- * is checked before any mail is sent, and a seeded account is not itself permission to enter.
+ * Each address must also appear in `FAMILY_EMAILS` or that person cannot sign in. The allowlist is
+ * checked before any mail goes out, and a seeded account is not itself permission to enter.
  */
 const FAMILY = [
   {
-    email: "b@arbini.dev",
+    email: "b@arbini.com",
     name: "Brandon Arbini",
     role: FamilyRole.PARENT,
     sortOrder: 0,
@@ -45,11 +44,35 @@ const FAMILY = [
     birthday: null as string | null,
   },
   {
-    email: "tanner@arbini.dev",
+    email: "jill@arbini.com",
+    name: "Jill Arbini",
+    role: FamilyRole.PARENT,
+    sortOrder: 10,
+    color: "#7d3f8c",
+    birthday: null as string | null,
+  },
+  {
+    email: "tanner@arbini.com",
     name: "Tanner Arbini",
     role: FamilyRole.KID,
     sortOrder: 20,
     color: "#1f6fb4",
+    birthday: null as string | null,
+  },
+  {
+    email: "addison@arbini.com",
+    name: "Addison Arbini",
+    role: FamilyRole.KID,
+    sortOrder: 30,
+    color: "#1f8c6e",
+    birthday: null as string | null,
+  },
+  {
+    email: "macy@arbini.com",
+    name: "Macy Arbini",
+    role: FamilyRole.KID,
+    sortOrder: 40,
+    color: "#c2185b",
     birthday: null as string | null,
   },
 ];
