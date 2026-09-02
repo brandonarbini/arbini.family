@@ -14,6 +14,10 @@ import { formatCalendarDate, todayInFamilyTz } from "@/lib/dates";
  * rule beneath it — one heavy line over one hairline — then the dateline, then the links. That
  * stack is the one piece of newspaper furniture everyone recognises without being told what it is
  * imitating, and it costs a handful of divs.
+ *
+ * Account chrome — who you are, signing out, the theme — sits in the footer as a colophon. None
+ * of it is navigation, and keeping it out of the nav leaves that row as three destinations and
+ * nothing else.
  */
 export function AppShell({
   userName,
@@ -28,7 +32,7 @@ export function AppShell({
   const today = todayInFamilyTz();
 
   return (
-    <div className="relative z-10 min-h-screen">
+    <div className="relative z-10 flex min-h-screen flex-col">
       <header className="mx-auto max-w-3xl px-6 pt-10">
         <Link
           href="/home"
@@ -44,28 +48,32 @@ export function AppShell({
           {formatCalendarDate(today, "EEEE d MMMM yyyy")}
         </p>
 
-        {/*
-          `flex-wrap` rather than a fixed row: five items at this size overflow a narrow phone, and
-          wrapping to a second centred line degrades better than a horizontal scroll or hidden
-          links.
-        */}
-        <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-sm">
+        <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm">
           <NavLink href="/home">Board</NavLink>
           <NavLink href="/home/where">Where I am</NavLink>
           <NavLink href="/account">Account</NavLink>
-          <span
-            className="mx-2 hidden h-4 w-px bg-border sm:block"
-            aria-hidden
-          />
-          <span className="px-2 text-muted-foreground">{userName}</span>
-          <SignOutButton />
-          <ThemeToggle />
         </nav>
 
         <div className="mt-4 border-t border-foreground" aria-hidden />
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 pb-16 pt-10">{children}</main>
+      {/* `flex-1` so the colophon sits at the bottom of the viewport on a short page rather than
+          floating directly under the content. */}
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 pb-16 pt-10">
+        {children}
+      </main>
+
+      <footer className="mx-auto w-full max-w-3xl px-6 pb-10">
+        <div className="border-t border-foreground" aria-hidden />
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[0.6875rem] text-muted-foreground">
+          <span className="uppercase tracking-[0.2em]">
+            Signed in as {userName}
+          </span>
+          <span aria-hidden>&middot;</span>
+          <SignOutButton />
+          <ThemeToggle />
+        </div>
+      </footer>
     </div>
   );
 }
