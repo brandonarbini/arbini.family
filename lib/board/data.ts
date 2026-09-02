@@ -1,6 +1,8 @@
 import "server-only";
 
+import { cacheLife, cacheTag } from "next/cache";
 import type { FamilyRole } from "@/generated/prisma/enums";
+import { BOARD_TAGS } from "@/lib/board/cache";
 import {
   type CalendarDate,
   addCalendarDays,
@@ -22,7 +24,13 @@ import { prisma } from "@/lib/prisma";
  * can be tested against without a database.
  *
  * No `auth()` here by design — entry points authorize, queries read. There is exactly one family,
- * so there is no tenant key to scope by.
+ * so there is no tenant key to scope by. That purity is what lets these carry `"use cache"` at
+ * all: a cached function that touches `cookies()` or `headers()` fails immediately with
+ * `next-request-in-use-cache`.
+ *
+ * Arguments become the cache key automatically, which is why `from` is a parameter rather than
+ * being read from the clock in here — a cached function that called `todayInFamilyTz()` itself
+ * would serve yesterday's board tomorrow.
  */
 
 /** How far ahead `findNextGathering` may look, and therefore how many stays are worth loading. */
@@ -48,6 +56,11 @@ export interface FamilyMember {
  * around is hard to read at a glance.
  */
 export async function getFamilyMembers(): Promise<FamilyMember[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.members);
+  // The five of us change about never; the tag covers the rare edit.
+  cacheLife("days");
+
   const profiles = await prisma.profile.findMany({
     orderBy: [{ sortOrder: "asc" }, { user: { name: "asc" } }],
     select: {
@@ -85,6 +98,10 @@ export interface Place {
 }
 
 export async function getPlaces(): Promise<Place[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.places);
+  cacheLife("days");
+
   const places = await prisma.place.findMany({
     orderBy: [{ isHome: "desc" }, { name: "asc" }],
     select: { id: true, name: true, address: true, isHome: true },
@@ -112,6 +129,10 @@ export async function getStaysForWindow(
   from: CalendarDate,
   horizonDays: number = GATHERING_HORIZON_DAYS,
 ): Promise<BoardStay[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.stays);
+  cacheLife("hours");
+
   const stays = await prisma.stay.findMany({
     where: {
       startsOn: {
@@ -146,6 +167,10 @@ export async function getStaysForWindow(
 export async function getStaysForProfile(
   profileId: string,
 ): Promise<BoardStay[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.stays);
+  cacheLife("hours");
+
   const stays = await prisma.stay.findMany({
     where: { profileId },
     orderBy: [{ startsOn: "desc" }],
@@ -181,6 +206,10 @@ export async function getEventsForWindow(
   from: CalendarDate,
   throughDays: number,
 ): Promise<BoardEvent[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.events);
+  cacheLife("hours");
+
   const events = await prisma.event.findMany({
     where: {
       date: {
@@ -211,6 +240,10 @@ export type EventsData = Awaited<ReturnType<typeof getEventsForWindow>>;
  * Its own narrow query because the edit and delete actions need the owner *before* they touch the
  * row, to decide whether the caller may. Loading the whole stay to read one column would invite
  * passing the rest of it somewhere it does not belong.
+ *
+ * Deliberately **not** cached, unlike everything else here. This read is an authorization input:
+ * a cached answer would keep saying a stay belongs to whoever owned it when the entry was written,
+ * so a reassigned row could be edited by its previous owner for as long as the entry lived.
  */
 export async function getStayOwnerProfileId(
   stayId: string,

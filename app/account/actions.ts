@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
+import { PASSKEY_TAGS } from "@/app/account/data";
 import {
   type ActionResult,
   deletePasskeySchema,
@@ -39,6 +40,6 @@ export async function removePasskey(
     return { ok: false, formError: "That passkey no longer exists." };
   }
 
-  revalidatePath("/account");
+  updateTag(PASSKEY_TAGS.forUser(user.id));
   return { ok: true };
 }

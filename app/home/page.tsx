@@ -5,13 +5,19 @@ import { PersonBadge } from "@/components/person-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAuth } from "@/lib/auth-helpers";
 import type { AgendaEntry } from "@/lib/board/agenda";
-import { describeRelativeDay, formatCalendarDate } from "@/lib/dates";
+import {
+  describeRelativeDay,
+  formatCalendarDate,
+  todayInFamilyTz,
+} from "@/lib/dates";
 
 export const metadata = { title: "The board — arbini.family" };
 
 export default async function BoardPage() {
   await requireAuth();
-  const board = await getBoardView();
+  // Read here rather than inside the data layer: the cached queries key on their arguments, so
+  // the clock has to be consulted outside them or "today" would be frozen into a cache entry.
+  const board = await getBoardView(todayInFamilyTz());
 
   return (
     <div className="space-y-6">

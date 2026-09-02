@@ -11,11 +11,7 @@ import {
   getPlaces,
   getStaysForWindow,
 } from "@/lib/board/data";
-import {
-  type CalendarDate,
-  differenceInCalendarDays,
-  todayInFamilyTz,
-} from "@/lib/dates";
+import { type CalendarDate, differenceInCalendarDays } from "@/lib/dates";
 import {
   findNextGathering,
   staysOn,
@@ -29,6 +25,11 @@ import {
  * it composes are the shared ones in `@/lib/board/data`.
  *
  * No auth here — `page.tsx` does that before calling in.
+ *
+ * `today` is a required parameter rather than a default read from the clock. The reads underneath
+ * are cached and keyed on their arguments, so a date resolved in here would be baked into the
+ * cache entry and the board would still be showing yesterday tomorrow. The page reads the clock,
+ * which it may — it is dynamic already because it reads the session.
  */
 
 /** How far ahead "what's coming up" looks. A month is about as far as a family plans in detail. */
@@ -49,7 +50,7 @@ export interface NextGathering {
   inDays: number;
 }
 
-export async function getBoardView(today: CalendarDate = todayInFamilyTz()) {
+export async function getBoardView(today: CalendarDate) {
   // Started together rather than awaited in sequence: they are independent, and four sequential
   // round trips would make the board's first paint the sum of them rather than the slowest.
   const [members, places, stays, events] = await Promise.all([

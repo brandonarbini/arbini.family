@@ -1,12 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import {
   type ActionResult,
   deleteStaySchema,
   stayFormSchema,
 } from "@/app/home/where/validations";
 import { requireProfile } from "@/lib/auth-helpers";
+import { BOARD_TAGS } from "@/lib/board/cache";
 import { canEditProfile } from "@/lib/board/permissions";
 import { getStayOwnerProfileId } from "@/lib/board/data";
 import { createStay, deleteStay, updateStay } from "@/lib/board/service";
@@ -67,12 +68,10 @@ export async function saveStay(
     await createStay({ profileId, placeId, startsOn, endsOn, note });
   }
 
-  // No cache tags to invalidate — this project has not adopted Cache Components, and the board
-  // renders dynamically because it reads the session. `revalidatePath` still clears the client
-  // router cache, so navigating back to the board shows the change rather than the previous
-  // render.
-  revalidatePath("/home");
-  revalidatePath("/home/where");
+  // `updateTag` rather than `revalidateTag`: this is a Server Action, and updateTag gives
+  // read-your-own-writes — the very next render sees the new stay instead of a stale entry being
+  // refreshed in the background while the user stares at the trip they just added.
+  updateTag(BOARD_TAGS.stays);
   return { ok: true };
 }
 
@@ -96,7 +95,6 @@ export async function removeStay(
   }
 
   await deleteStay(parsed.data.stayId);
-  revalidatePath("/home");
-  revalidatePath("/home/where");
+  updateTag(BOARD_TAGS.stays);
   return { ok: true };
 }
