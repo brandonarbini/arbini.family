@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth-helpers";
 import { formatCalendarDate } from "@/lib/dates";
 
-export const metadata = { title: "Where I am — arbini.family" };
+export const metadata = { title: "Where I am — Arbini Family" };
 
 export default async function WherePage() {
   const actor = await requireProfile("/home/where");

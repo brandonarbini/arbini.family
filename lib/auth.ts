@@ -105,7 +105,7 @@ export const auth = betterAuth({
 
     passkey({
       rpID: resolveRpId(),
-      rpName: "arbini.family",
+      rpName: "Arbini Family",
       origin: resolveBaseUrl(),
     }),
 

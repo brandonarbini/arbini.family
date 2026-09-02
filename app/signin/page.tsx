@@ -3,7 +3,7 @@ import { SignInForm } from "@/app/signin/signin-form";
 import { DEFAULT_SIGNED_IN_PATH, sanitizeReturnTo } from "@/lib/auth-redirect";
 import { getCurrentUser } from "@/lib/auth-helpers";
 
-export const metadata = { title: "Sign in — arbini.family" };
+export const metadata = { title: "Sign in — Arbini Family" };
 
 export default async function SignInPage({
   searchParams,
@@ -24,8 +24,10 @@ export default async function SignInPage({
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-sm">
-        <h1 className="font-display text-2xl">arbini.family</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-display text-center text-5xl leading-none sm:text-6xl">
+          Arbini Family
+        </h1>
+        <p className="mt-2 text-center text-sm text-muted-foreground">
           For the five of us.
         </p>
         <SignInForm returnTo={returnTo} />

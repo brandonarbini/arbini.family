@@ -25,10 +25,10 @@ export function MagicLinkEmail({ url, expiresInMinutes }: MagicLinkEmailProps) {
   return (
     <Html>
       <Head />
-      <Preview>Your link to sign in to arbini.family</Preview>
+      <Preview>Your link to sign in to Arbini Family</Preview>
       <Body style={body}>
         <Container style={container}>
-          <Heading style={heading}>arbini.family</Heading>
+          <Heading style={heading}>Arbini Family</Heading>
           <Text style={text}>
             Tap the button to sign in. The link works once and expires in{" "}
             {expiresInMinutes} minutes.

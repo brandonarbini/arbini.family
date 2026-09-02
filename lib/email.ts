@@ -64,7 +64,7 @@ export async function sendMagicLinkEmail({
   await getClient().sendEmail({
     From: env.POSTMARK_FROM_EMAIL!,
     To: email,
-    Subject: "Sign in to arbini.family",
+    Subject: "Sign in to Arbini Family",
     HtmlBody: html,
     TextBody: text,
     MessageStream: "outbound",

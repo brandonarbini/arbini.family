@@ -6,7 +6,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAuth } from "@/lib/auth-helpers";
 
-export const metadata = { title: "Account — arbini.family" };
+export const metadata = { title: "Account — Arbini Family" };
 
 export default async function AccountPage() {
   const user = await requireAuth("/account");

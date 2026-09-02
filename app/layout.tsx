@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,11 +14,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "arbini.family",
+  title: "Arbini Family",
   description: "A private board for the Arbini family.",
   // Nothing here is public, and the board describes where five people physically are. Keeping it
   // out of search results is the cheapest part of not publishing that.
   robots: { index: false, follow: false },
+};
+
+/**
+ * Declares that both palettes exist, so the very first paint — before any JavaScript runs — can
+ * use the system preference instead of being forced light.
+ *
+ * It is only half the story: `next-themes` then writes `style="color-scheme: <theme>"` onto
+ * <html> once it knows the answer, and *that* is what makes native date pickers, selects and
+ * scrollbars follow the app's own toggle rather than the operating system. Without it, choosing
+ * light on a machine set to dark would leave the date inputs dark inside a light form.
+ */
+export const viewport = {
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -26,7 +40,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // next-themes writes the theme class onto <html> before paint, which the server render cannot
+    // predict. suppressHydrationWarning silences the resulting attribute mismatch on this element
+    // only — it does not extend to the tree below.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/*
           The Typekit headline face. A <link> rather than an @import in globals.css: an @import
@@ -41,7 +58,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

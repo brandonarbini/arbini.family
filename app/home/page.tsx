@@ -11,7 +11,7 @@ import {
   todayInFamilyTz,
 } from "@/lib/dates";
 
-export const metadata = { title: "The board — arbini.family" };
+export const metadata = { title: "The board — Arbini Family" };
 
 export default async function BoardPage() {
   await requireAuth();
