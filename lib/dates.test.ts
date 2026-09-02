@@ -3,6 +3,8 @@ import {
   addCalendarDays,
   calendarDateFromDbDate,
   compareCalendarDates,
+  describeRelativeDay,
+  formatCalendarDate,
   dbDateFromCalendarDate,
   differenceInCalendarDays,
   eachCalendarDay,
@@ -222,5 +224,54 @@ describe("Prisma @db.Date conversion", () => {
         expect(calendarDateFromDbDate(dbDateFromCalendarDate(date))).toBe(date);
       }
     }
+  });
+});
+
+describe("formatCalendarDate", () => {
+  it("renders the date it was given", () => {
+    expect(formatCalendarDate("2026-04-20")).toBe("Mon 20 Apr");
+  });
+
+  it("does not shift the day when the runtime zone is west of UTC", () => {
+    // The whole point. Formatting UTC midnight in America/Los_Angeles yields the 19th, which is
+    // the off-by-one this module exists to prevent — and display is the last place it can creep
+    // back in.
+    const previousTz = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(formatCalendarDate("2026-04-20", "yyyy-MM-dd")).toBe("2026-04-20");
+    } finally {
+      process.env.TZ = previousTz;
+    }
+  });
+
+  it("accepts a custom pattern", () => {
+    expect(formatCalendarDate("2026-01-05", "d MMMM yyyy")).toBe(
+      "5 January 2026",
+    );
+  });
+
+  it("rejects a malformed date rather than rendering something plausible", () => {
+    expect(() => formatCalendarDate("2026-13-01")).toThrow(TypeError);
+  });
+});
+
+describe("describeRelativeDay", () => {
+  it("names today, tomorrow and yesterday", () => {
+    expect(describeRelativeDay("2026-04-20", "2026-04-20")).toBe("today");
+    expect(describeRelativeDay("2026-04-21", "2026-04-20")).toBe("tomorrow");
+    expect(describeRelativeDay("2026-04-19", "2026-04-20")).toBe("yesterday");
+  });
+
+  it("counts days out to a week", () => {
+    expect(describeRelativeDay("2026-04-27", "2026-04-20")).toBe("in 7 days");
+  });
+
+  it("declines beyond a week, so the caller can show the date instead", () => {
+    expect(describeRelativeDay("2026-04-28", "2026-04-20")).toBeNull();
+  });
+
+  it("declines for dates further in the past than yesterday", () => {
+    expect(describeRelativeDay("2026-04-10", "2026-04-20")).toBeNull();
   });
 });

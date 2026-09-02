@@ -67,6 +67,28 @@ export function locationsOn(
   profileIds: readonly string[],
   date: CalendarDate,
 ): Map<string, string | null> {
+  return new Map(
+    Array.from(staysOn(stays, profileIds, date), ([profileId, stay]) => [
+      profileId,
+      stay?.placeId ?? null,
+    ]),
+  );
+}
+
+/**
+ * Each profile's governing stay on a given day, or `null` where nothing is recorded.
+ *
+ * The same resolution `locationsOn` performs, but handing back the whole stay — the board shows
+ * not just *where* someone is but *until when*, and that needs `endsOn`. `locationsOn` is defined
+ * in terms of this so the tie-breaking rule exists in exactly one place; two copies of it would
+ * be free to disagree about which stay wins, and the board would then contradict itself about a
+ * person's place and their departure date.
+ */
+export function staysOn(
+  stays: readonly StayWindow[],
+  profileIds: readonly string[],
+  date: CalendarDate,
+): Map<string, StayWindow | null> {
   const day = assertCalendarDate(date, "date");
   const wanted = new Set(profileIds);
   const best = new Map<string, StayWindow>();
@@ -85,10 +107,7 @@ export function locationsOn(
   }
 
   return new Map(
-    profileIds.map((profileId) => [
-      profileId,
-      best.get(profileId)?.placeId ?? null,
-    ]),
+    profileIds.map((profileId) => [profileId, best.get(profileId) ?? null]),
   );
 }
 

@@ -136,3 +136,41 @@ function formatUtcDate(value: Date): CalendarDate {
   const day = String(value.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Render a calendar date for display.
+ *
+ * Formatted in **UTC**, for the same reason `calendarDateFromDbDate` is: the string is turned
+ * back into a UTC-midnight instant to be formatted, and rendering that instant in
+ * `FAMILY_TIMEZONE` — or worse, in the viewer's own zone — moves it to the previous day for
+ * anyone west of Greenwich. Formatting is the last place this bug can be reintroduced, which is
+ * why it lives here next to the rule rather than being done ad hoc at each call site.
+ */
+export function formatCalendarDate(
+  date: CalendarDate,
+  pattern = "EEE d MMM",
+): string {
+  return formatInTimeZone(
+    dbDateFromCalendarDate(assertCalendarDate(date, "date")),
+    "UTC",
+    pattern,
+  );
+}
+
+/**
+ * A relative phrase for a date near today — "today", "tomorrow", "in 6 days".
+ *
+ * Beyond a week it returns `null` rather than "in 43 days", which reads as arithmetic rather than
+ * as language; the caller falls back to the date itself.
+ */
+export function describeRelativeDay(
+  date: CalendarDate,
+  today: CalendarDate,
+): string | null {
+  const days = differenceInCalendarDays(today, date);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  if (days > 1 && days <= 7) return `in ${days} days`;
+  return null;
+}
