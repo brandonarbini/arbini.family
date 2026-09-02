@@ -27,9 +27,10 @@ function assertNotProduction(): void {
  * `sortOrder` is the board's row order — parents first, then the kids. Gaps of ten so somebody can
  * be slotted in without renumbering everyone.
  *
- * Birthdays are left null rather than guessed. The board derives every birthday from this column,
- * so a wrong date here is a wrong date on the board every year until somebody notices; fill them
- * in and re-run, and the upsert below will carry the change through.
+ * Birthdays are the full date of birth, not just the day and month: the board reports the age
+ * somebody is turning, which needs the year. Stored as `YYYY-MM-DD` strings here and converted to
+ * the UTC-midnight instant a `@db.Date` column expects at the point of writing — never by handing
+ * a locally-parsed `Date` to Prisma, which is where a birthday drifts a day.
  *
  * Each address must also appear in `FAMILY_EMAILS` or that person cannot sign in. The allowlist is
  * checked before any mail goes out, and a seeded account is not itself permission to enter.
@@ -41,7 +42,7 @@ const FAMILY = [
     role: FamilyRole.PARENT,
     sortOrder: 0,
     color: "#b4541f",
-    birthday: null as string | null,
+    birthday: "1979-11-02",
   },
   {
     email: "jill@arbini.com",
@@ -49,7 +50,7 @@ const FAMILY = [
     role: FamilyRole.PARENT,
     sortOrder: 10,
     color: "#7d3f8c",
-    birthday: null as string | null,
+    birthday: "1980-03-16",
   },
   {
     email: "tanner@arbini.com",
@@ -57,7 +58,7 @@ const FAMILY = [
     role: FamilyRole.KID,
     sortOrder: 20,
     color: "#1f6fb4",
-    birthday: null as string | null,
+    birthday: "2005-06-14",
   },
   {
     email: "addison@arbini.com",
@@ -65,7 +66,7 @@ const FAMILY = [
     role: FamilyRole.KID,
     sortOrder: 30,
     color: "#1f8c6e",
-    birthday: null as string | null,
+    birthday: "2007-12-24",
   },
   {
     email: "macy@arbini.com",
@@ -73,7 +74,7 @@ const FAMILY = [
     role: FamilyRole.KID,
     sortOrder: 40,
     color: "#c2185b",
-    birthday: null as string | null,
+    birthday: "2011-08-23",
   },
 ];
 

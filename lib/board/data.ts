@@ -31,6 +31,18 @@ import { prisma } from "@/lib/prisma";
  * Arguments become the cache key automatically, which is why `from` is a parameter rather than
  * being read from the clock in here — a cached function that called `todayInFamilyTz()` itself
  * would serve yesterday's board tomorrow.
+ *
+ * **Cache lifetimes are set by who writes the data, not by how often it changes.** A tag only
+ * fires when the write goes through a Server Action, so anything editable from outside the app —
+ * profiles and places, both of which come from `prisma/seed.ts`, and events, which have no editor
+ * yet — gets `"minutes"`. Members change about never and the instinct is to cache them for days,
+ * but that is precisely the trap: setting the family's birthdays means editing the seed and
+ * re-running it, and a day-long entry would leave the board insisting nobody has a birthday
+ * coming while the database plainly says otherwise. Stays are the one thing written only through
+ * a tagged action, so they can afford a longer life.
+ *
+ * These are five-row queries against a local Postgres; the caching here buys correctness of the
+ * pattern, not latency, and it is not worth a minute of anyone's confusion.
  */
 
 /** How far ahead `findNextGathering` may look, and therefore how many stays are worth loading. */
@@ -58,8 +70,9 @@ export interface FamilyMember {
 export async function getFamilyMembers(): Promise<FamilyMember[]> {
   "use cache";
   cacheTag(BOARD_TAGS.members);
-  // The five of us change about never; the tag covers the rare edit.
-  cacheLife("days");
+  // Minutes, not days, despite this changing about never — see the note on cache lifetimes at
+  // the top of this file.
+  cacheLife("minutes");
 
   const profiles = await prisma.profile.findMany({
     orderBy: [{ sortOrder: "asc" }, { user: { name: "asc" } }],
@@ -100,7 +113,7 @@ export interface Place {
 export async function getPlaces(): Promise<Place[]> {
   "use cache";
   cacheTag(BOARD_TAGS.places);
-  cacheLife("days");
+  cacheLife("minutes");
 
   const places = await prisma.place.findMany({
     orderBy: [{ isHome: "desc" }, { name: "asc" }],
@@ -208,7 +221,7 @@ export async function getEventsForWindow(
 ): Promise<BoardEvent[]> {
   "use cache";
   cacheTag(BOARD_TAGS.events);
-  cacheLife("hours");
+  cacheLife("minutes");
 
   const events = await prisma.event.findMany({
     where: {
