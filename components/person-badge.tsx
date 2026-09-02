@@ -20,10 +20,33 @@ import { cn } from "@/lib/utils";
  * makes each avatar distinct, so a shared set of colours leaves the five of them looking like one
  * family rather than five unrelated stickers.
  *
- * Mid-tone on purpose. The board renders on both a white and a near-black card, so a palette
- * anchored at either end would leave some avatars washed out in one theme.
+ * Two properties this list is built around, both of them consequences of how the library actually
+ * works (`u(hash + t, colors, len)` in boring-avatars):
+ *
+ * 1. **Adjacent entries always appear together.** A beam takes its background from
+ *    `colors[hash % len]` and its hair from the very next index. So neighbours here must contrast
+ *    with each other — hue variety alone is not enough if two similar colours happen to sit side
+ *    by side. Every consecutive pair, including the wrap from last to first, is a strong contrast.
+ *
+ * 2. **Nine entries, not five.** The background index is `hash % len`, so with five colours and
+ *    five people the hashes collide: Brandon, Jill and Tanner all landed on the same gold. Nine is
+ *    the shortest length at which all five of the current names come out distinct.
+ *
+ * That second point is tuned to the names in `prisma/seed.ts` — rename somebody and the
+ * assignment reshuffles, possibly onto a shared background. Nothing breaks if that happens, and
+ * the first property still holds for any name, so this is a nicety rather than an invariant.
  */
-const FAMILY_PALETTE = ["#b4541f", "#e8a33d", "#d9c5a0", "#3d5a5b", "#8c4a6b"];
+const FAMILY_PALETTE = [
+  "#ff5e5b", // coral
+  "#00c2a8", // turquoise
+  "#ffb400", // gold
+  "#3d7bff", // blue
+  "#ffd166", // butter
+  "#c34fd9", // magenta
+  "#7ed957", // lime
+  "#ff8c42", // orange
+  "#2ec4f1", // sky
+];
 
 export function PersonBadge({
   name,
