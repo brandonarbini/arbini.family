@@ -44,6 +44,7 @@
   --border: oklch(0.55 0.02 70);
   --input: oklch(0.55 0.02 70);
   --ring: oklch(0.5 0.17 32);
+  --paper-grain: 0.055;
 }
 
 .dark {
@@ -70,11 +71,13 @@
   --border: oklch(0.48 0.016 72);
   --input: oklch(0.48 0.016 72);
   --ring: oklch(0.62 0.17 32);
+  --paper-grain: 0.03;
 }
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-copy: ui-serif, Georgia, "Times New Roman", serif;
 
   /* Flat rather than derived: calc() off a zero base produces negative lengths. */
   --radius-sm: 0;
@@ -111,6 +114,27 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /**
+   * Paper grain.
+   *
+   * An inline SVG `feTurbulence` rather than an image: nothing to download, nothing to fail
+   * offline, and it tiles at any viewport without a seam. Painted by a fixed pseudo-element so it
+   * does not repaint on scroll and does not enter the content flow — `pointer-events: none` keeps
+   * it from swallowing a single click.
+   *
+   * The strength is a token because noise reads far more strongly on a dark ground than a light
+   * one; a single opacity that is subtle on paper is dirt on ink.
+   */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--paper-grain);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   }
 }
 

@@ -3,7 +3,7 @@ import {
   AddPasskeyButton,
   RemovePasskeyButton,
 } from "@/app/account/passkey-controls";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RuledList, Section } from "@/components/ui/section";
 import { requireAuth } from "@/lib/auth-helpers";
 
 export const metadata = { title: "Account — Arbini Family" };
@@ -13,34 +13,33 @@ export default async function AccountPage() {
   const passkeys = await getPasskeys(user.id);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-headline text-3xl">{user.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
+    <div>
+      <div className="mb-10">
+        <h1 className="font-headline text-4xl">{user.name}</h1>
+        <p className="font-copy mt-2 text-base text-muted-foreground">
+          {user.email}
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Passkeys</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
+      <Section title="Passkeys">
+        <div className="space-y-4">
+          <p className="font-copy text-base text-muted-foreground">
             A passkey signs you in with your face, fingerprint or device PIN, so
             you stop needing the email link. Add one per device.
           </p>
 
           {passkeys.length > 0 ? (
-            <ul className="divide-y">
+            <RuledList>
               {passkeys.map((passkey) => (
                 <li
                   key={passkey.id}
-                  className="flex items-center gap-3 py-2 first:pt-0"
+                  className="flex items-center gap-3 py-3 first:pt-0"
                 >
                   <div>
-                    <p className="text-sm font-medium">
+                    <p className="font-copy text-base font-semibold">
                       {passkey.name ?? "Passkey"}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="font-copy text-base text-muted-foreground">
                       {passkey.deviceType === "singleDevice"
                         ? "This device only"
                         : "Synced across your devices"}
@@ -51,12 +50,12 @@ export default async function AccountPage() {
                   </div>
                 </li>
               ))}
-            </ul>
+            </RuledList>
           ) : null}
 
           <AddPasskeyButton />
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
     </div>
   );
 }

@@ -16,6 +16,10 @@ import { cn } from "@/lib/utils";
  */
 
 /**
+ * Bright on purpose. Everything around these is ink on paper, so the avatars are the one place
+ * colour appears — five saturated marks that tell the rows apart at a glance and keep the page
+ * from reading as a pastiche.
+ *
  * One palette for the whole family, which is how these are meant to be used: the *name* is what
  * makes each avatar distinct, so a shared set of colours leaves the five of them looking like one
  * family rather than five unrelated stickers.
@@ -37,18 +41,18 @@ import { cn } from "@/lib/utils";
  * the first property still holds for any name, so this is a nicety rather than an invariant.
  */
 const FAMILY_PALETTE = [
-  // Strictly alternating dark and light, because a beam takes its background and its hair from
-  // neighbouring indices — two darks side by side would produce an avatar with no internal
-  // contrast. Nine entries so all five current names land on distinct backgrounds.
-  "#1c1917", // ink
-  "#f2ede1", // paper
-  "#b3271e", // press red
-  "#e6dfd0", // paper, warmer
-  "#443c35", // ink, lifted
-  "#d9d0bd", // paper, deeper
-  "#8c1f18", // press red, deeper
-  "#efe8da", // paper, palest
-  "#a89a86", // tan
+  // Strictly alternating hot and cool so neighbouring indices always contrast — a beam takes its
+  // background and its hair from adjacent entries. Nine so all five current names land on
+  // distinct backgrounds.
+  "#ff5e5b", // coral
+  "#00c2a8", // turquoise
+  "#ffb400", // gold
+  "#3d7bff", // blue
+  "#ffd166", // butter
+  "#c34fd9", // magenta
+  "#7ed957", // lime
+  "#ff8c42", // orange
+  "#2ec4f1", // sky
 ];
 
 export function PersonBadge({

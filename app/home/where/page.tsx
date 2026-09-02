@@ -2,7 +2,7 @@ import { getEditorData } from "@/app/home/where/data";
 import { DeleteStayButton } from "@/app/home/where/delete-stay-button";
 import { StayForm } from "@/app/home/where/stay-form";
 import { PersonBadge } from "@/components/person-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RuledList, Section } from "@/components/ui/section";
 import { requireProfile } from "@/lib/auth-helpers";
 import { formatCalendarDate } from "@/lib/dates";
 
@@ -13,79 +13,70 @@ export default async function WherePage() {
   const { places, editable, stayLists } = await getEditorData(actor);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-headline text-3xl">Where I am</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <div>
+      <div className="mb-10">
+        <h1 className="font-headline text-4xl">Where I am</h1>
+        <p className="font-copy mt-2 text-base text-muted-foreground">
           A stay is a place and a stretch of days. The board works everything
           out from these.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a stay</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {places.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              There are no places yet. Run <code>pnpm db:seed</code> to create
-              Home.
-            </p>
-          ) : (
-            <StayForm
-              people={editable}
-              places={places}
-              defaultProfileId={actor.profileId}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <Section title="Add a stay">
+        {places.length === 0 ? (
+          <p className="font-copy text-base text-muted-foreground">
+            There are no places yet. Run <code>pnpm db:seed</code> to create
+            Home.
+          </p>
+        ) : (
+          <StayForm
+            people={editable}
+            places={places}
+            defaultProfileId={actor.profileId}
+          />
+        )}
+      </Section>
 
       {stayLists.map(({ member, stays }) => (
-        <Card key={member.profileId}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PersonBadge name={member.name} size={24} />
-              {member.name}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {stays.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+        <Section key={member.profileId} title={member.name}>
+          {stays.length === 0 ? (
+            <div className="flex items-center gap-3">
+              <PersonBadge name={member.name} size={28} />
+              <p className="font-copy text-base text-muted-foreground">
                 Nothing recorded yet.
               </p>
-            ) : (
-              <ul className="divide-y">
-                {stays.map((stay) => {
-                  const place = places.find((p) => p.id === stay.placeId);
-                  return (
-                    <li
-                      key={stay.id}
-                      className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">
-                          {place?.name ?? "Unknown place"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCalendarDate(stay.startsOn)}
-                          {stay.endsOn
-                            ? ` – ${formatCalendarDate(stay.endsOn)}`
-                            : " onwards"}
-                          {stay.note ? ` · ${stay.note}` : ""}
-                        </p>
-                      </div>
-                      <div className="ml-auto">
-                        <DeleteStayButton stayId={stay.id} />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          ) : (
+            <RuledList>
+              {stays.map((stay) => {
+                const place = places.find((p) => p.id === stay.placeId);
+                return (
+                  <li
+                    key={stay.id}
+                    className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
+                  >
+                    <PersonBadge name={member.name} size={28} />
+                    <div className="min-w-0">
+                      <p className="font-copy text-base font-semibold">
+                        {place?.name ?? "Unknown place"}
+                      </p>
+                      <p className="font-copy text-base text-muted-foreground">
+                        {formatCalendarDate(stay.startsOn)}
+                        {stay.endsOn
+                          ? ` – ${formatCalendarDate(stay.endsOn)}`
+                          : " onwards"}
+                        {stay.note ? ` · ${stay.note}` : ""}
+                      </p>
+                    </div>
+                    <div className="ml-auto">
+                      <DeleteStayButton stayId={stay.id} />
+                    </div>
+                  </li>
+                );
+              })}
+            </RuledList>
+          )}
+        </Section>
       ))}
     </div>
   );
