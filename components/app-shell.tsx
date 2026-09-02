@@ -33,7 +33,13 @@ export function AppShell({
 
   return (
     <div className="relative z-10 flex min-h-screen flex-col">
-      <header className="mx-auto max-w-3xl px-6 pt-10">
+      {/*
+        `w-full` matters here. The shell is a flex column, so `mx-auto` on a child sets its
+        horizontal margins to auto and the element shrinks to fit its content instead of
+        stretching — which left the masthead rules narrower than the section rules below them.
+        `main` and `footer` already carried it; the header did not.
+      */}
+      <header className="mx-auto w-full max-w-3xl px-6 pt-10">
         <Link
           href="/home"
           className="font-logo block text-center text-5xl leading-none sm:text-6xl"
