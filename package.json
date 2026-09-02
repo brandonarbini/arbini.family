@@ -21,7 +21,8 @@
     "postinstall": "prisma generate",
     "test:env": "dotenv -e .env -e .env.test -o --",
     "dev:email": "email dev --dir emails --port 3001",
-    "env:cloud": "node scripts/env-cloud.mjs"
+    "env:cloud": "node scripts/env-cloud.mjs",
+    "dev:magic-link": "cat .magic-link.local"
   },
   "dependencies": {
     "@better-auth/passkey": "1.7.2",

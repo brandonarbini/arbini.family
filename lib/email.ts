@@ -1,5 +1,7 @@
 import "server-only";
 
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { render } from "react-email";
 import { ServerClient } from "postmark";
 import { MagicLinkEmail } from "@/emails/magic-link";
@@ -52,6 +54,7 @@ export async function sendMagicLinkEmail({
       return;
     }
     console.warn(`[email] Postmark not configured — magic link: ${url}`);
+    await writeDevMagicLink(url);
     return;
   }
 
@@ -69,4 +72,32 @@ export async function sendMagicLinkEmail({
     TextBody: text,
     MessageStream: "outbound",
   });
+}
+
+/**
+ * The most recent magic link, dropped on disk in development.
+ *
+ * The console warning above is only useful to whoever is looking at the dev server's stdout —
+ * which is nobody when the server was started in the background, by a script, or by somebody
+ * else. A file at a known path makes the link retrievable either way: `pnpm dev:magic-link`.
+ *
+ * Overwrites rather than appends, so the file always holds the link you just asked for instead of
+ * a history you have to read the end of.
+ *
+ * Reachable only from the branch above, which already returned in production — so this cannot put
+ * a live credential on a deployed filesystem. It is also best-effort: a dev convenience must never
+ * be the reason sign-in fails, hence the swallowed error.
+ */
+const DEV_MAGIC_LINK_FILE = ".magic-link.local";
+
+async function writeDevMagicLink(url: string): Promise<void> {
+  try {
+    await writeFile(
+      path.join(process.cwd(), DEV_MAGIC_LINK_FILE),
+      `${url}\n`,
+      "utf8",
+    );
+  } catch {
+    // Swallowed on purpose — see above.
+  }
 }

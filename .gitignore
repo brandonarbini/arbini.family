@@ -53,3 +53,6 @@ next-env.d.ts
 
 # prisma generated client
 /generated
+
+# The last magic link, written in development only (see lib/email.ts).
+.magic-link.local
