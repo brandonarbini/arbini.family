@@ -57,6 +57,7 @@ export function AppShell({
         <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm">
           <NavLink href="/home">Board</NavLink>
           <NavLink href="/home/where">Where I am</NavLink>
+          <NavLink href="/polls">Polls</NavLink>
           <NavLink href="/account">Account</NavLink>
         </nav>
 

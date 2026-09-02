@@ -21,4 +21,13 @@ export const BOARD_TAGS = {
   stays: "board:stays",
   /** Dated one-offs. */
   events: "board:events",
+  /**
+   * Every poll, its options and its replies under one tag.
+   *
+   * Answering is the one place on the board where five people are looking at the same screen at
+   * the same time, and what each of them is waiting to see is somebody else's answer appear. A
+   * finer-grained tag would buy nothing: there is no read of a poll that does not also want its
+   * replies.
+   */
+  polls: "board:polls",
 } as const;

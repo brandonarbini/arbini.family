@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cacheLife, cacheTag } from "next/cache";
-import type { FamilyRole } from "@/generated/prisma/enums";
+import type { FamilyRole, PollStatus } from "@/generated/prisma/enums";
 import { BOARD_TAGS } from "@/lib/board/cache";
 import {
   type CalendarDate,
@@ -9,7 +9,9 @@ import {
   calendarDateFromDbDate,
   dbDateFromCalendarDate,
 } from "@/lib/dates";
+import type { PollOptionWindow, PollReplyRecord } from "@/lib/polls/tally";
 import type { StayWindow } from "@/lib/presence";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -270,4 +272,130 @@ export async function getStayOwnerProfileId(
     select: { profileId: true },
   });
   return stay?.profileId ?? null;
+}
+
+export interface BoardPollOption extends PollOptionWindow {
+  replies: PollReplyRecord[];
+}
+
+export interface BoardPoll {
+  id: string;
+  title: string;
+  status: PollStatus;
+  settledOptionId: string | null;
+  createdById: string | null;
+  createdByName: string | null;
+  createdAt: Date;
+  options: BoardPollOption[];
+}
+
+/**
+ * Polls, newest first, with their options and every reply.
+ *
+ * `cacheLife("seconds")` rather than the `"hours"` the stays get, and deliberately against the
+ * "lifetimes are set by who writes the data" note above. Both of these *are* written only through
+ * a tagged Server Action, so by that rule they could live for hours. But answering a poll is the
+ * one screen where five people are looking at the same thing at once, and what each of them is
+ * waiting to see is somebody else's avatar light up. A minute of staleness there is not a slightly
+ * old board, it is the mechanic failing: you tap, nothing visibly happens, and you stop tapping.
+ * Seconds is short enough that even a missed invalidation heals before anyone reads it as broken.
+ */
+export async function getPolls(): Promise<BoardPoll[]> {
+  "use cache";
+  cacheTag(BOARD_TAGS.polls);
+  cacheLife("seconds");
+
+  const polls = await prisma.poll.findMany({
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    select: POLL_SELECT,
+  });
+  return polls.map(toBoardPoll);
+}
+
+/** One poll. `null` when the id does not exist — a shared link outliving its poll is ordinary. */
+export async function getPoll(pollId: string): Promise<BoardPoll | null> {
+  "use cache";
+  cacheTag(BOARD_TAGS.polls);
+  cacheLife("seconds");
+
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    select: POLL_SELECT,
+  });
+  return poll ? toBoardPoll(poll) : null;
+}
+
+/**
+ * Who created a poll, or `null` when there is no such poll.
+ *
+ * Its own narrow query, and deliberately **not** cached, for the same reason
+ * `getStayOwnerProfileId` is not: this is an authorization input. A cached answer would keep
+ * naming whoever created the poll when the entry was written, so it must be read fresh every time
+ * settle or delete asks whether the caller may.
+ *
+ * The outer `null` (no poll) and the inner one (creator's account removed) are different facts,
+ * hence the wrapper rather than a bare `string | null`.
+ */
+export async function getPollCreatorUserId(
+  pollId: string,
+): Promise<{ createdById: string | null } | null> {
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    select: { createdById: true },
+  });
+  return poll ? { createdById: poll.createdById } : null;
+}
+
+const POLL_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  settledOptionId: true,
+  createdById: true,
+  createdBy: { select: { name: true } },
+  createdAt: true,
+  options: {
+    // `sortOrder` here and again in `sortOptions`: the query gives the rows a stable order, and
+    // the pure sort makes that order total. Neither alone is enough.
+    orderBy: [{ sortOrder: "asc" }, { startsOn: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      startsOn: true,
+      endsOn: true,
+      sortOrder: true,
+      replies: {
+        orderBy: { profileId: "asc" },
+        select: { profileId: true, kind: true },
+      },
+    },
+  },
+} satisfies Prisma.PollSelect;
+
+/**
+ * Derived from the select rather than written out, so adding a column to one cannot silently
+ * leave the other behind.
+ */
+type PollRow = Prisma.PollGetPayload<{ select: typeof POLL_SELECT }>;
+
+function toBoardPoll(poll: PollRow): BoardPoll {
+  return {
+    id: poll.id,
+    title: poll.title,
+    status: poll.status,
+    settledOptionId: poll.settledOptionId,
+    createdById: poll.createdById,
+    createdByName: poll.createdBy?.name ?? null,
+    createdAt: poll.createdAt,
+    options: poll.options.map((option) => ({
+      optionId: option.id,
+      startsOn: calendarDateFromDbDate(option.startsOn),
+      endsOn: calendarDateFromDbDate(option.endsOn),
+      sortOrder: option.sortOrder,
+      replies: option.replies.map((reply) => ({
+        optionId: option.id,
+        profileId: reply.profileId,
+        kind: reply.kind,
+      })),
+    })),
+  };
 }

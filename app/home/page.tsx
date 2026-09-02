@@ -1,8 +1,13 @@
 import Link from "next/link";
-import { AGENDA_WINDOW_DAYS, getBoardView } from "@/app/home/data";
+import {
+  AGENDA_WINDOW_DAYS,
+  getBoardView,
+  getPollsAwaiting,
+} from "@/app/home/data";
 import { PersonBadge } from "@/components/person-badge";
 import { RuledList, Section } from "@/components/ui/section";
 import { requireAuth } from "@/lib/auth-helpers";
+import type { BoardPoll } from "@/lib/board/data";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import {
   describeRelativeDay,
@@ -13,17 +18,67 @@ import {
 export const metadata = { title: "The board — Arbini Family" };
 
 export default async function BoardPage() {
-  await requireAuth();
+  const user = await requireAuth();
   // Read here rather than inside the data layer: the cached queries key on their arguments, so
   // the clock has to be consulted outside them or "today" would be frozen into a cache entry.
-  const board = await getBoardView(todayInFamilyTz());
+  const today = todayInFamilyTz();
+  const [board, awaiting] = await Promise.all([
+    getBoardView(today),
+    user.profileId ? getPollsAwaiting(user.profileId, today) : [],
+  ]);
 
   return (
     <div>
+      <YourTurn polls={awaiting} viewerUserId={user.id} />
       <Gathering board={board} />
       <Presence board={board} />
       <Agenda board={board} />
     </div>
+  );
+}
+
+/**
+ * Polls waiting on you, above everything else.
+ *
+ * Above the lede on purpose, and the only thing on the board that asks the reader for something
+ * rather than telling them something. It renders nothing at all when there is nothing waiting —
+ * a permanent empty "no polls" slot would train people to stop looking at exactly the place the
+ * ask appears.
+ */
+function YourTurn({
+  polls,
+  viewerUserId,
+}: {
+  polls: BoardPoll[];
+  viewerUserId: string;
+}) {
+  if (polls.length === 0) return null;
+
+  return (
+    <Section title="Your turn">
+      <RuledList>
+        {polls.map((poll) => (
+          <li key={poll.id} className="py-2 first:pt-0 last:pb-0">
+            <Link
+              href={`/polls/${poll.id}`}
+              className="font-copy text-lg underline underline-offset-4"
+            >
+              {poll.title}
+            </Link>
+            <span className="font-copy ml-2 text-sm text-muted-foreground">
+              {/*
+                Never "Brandon is waiting on you" to Brandon. You can perfectly well be waiting on
+                your own poll — you have to answer it like everyone else — but being told so in
+                the third person reads as a bug.
+              */}
+              {poll.createdById === viewerUserId || !poll.createdByName
+                ? "you haven't answered yet"
+                : `${poll.createdByName.split(" ")[0]} is waiting on you`}
+            </span>
+          </li>
+        ))}
+      </RuledList>
+    </Section>
   );
 }
 

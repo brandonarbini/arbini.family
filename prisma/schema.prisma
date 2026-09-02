@@ -43,6 +43,7 @@ model User {
   // Domain relations
   profile       Profile?
   createdEvents Event[]
+  createdPolls  Poll[]
 
   @@map("users")
 }
@@ -166,7 +167,8 @@ model Profile {
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
 
-  stays Stay[]
+  stays       Stay[]
+  pollReplies PollReply[]
 
   @@index([defaultPlaceId])
   @@map("profiles")
@@ -239,4 +241,86 @@ model Event {
 
   @@index([date])
   @@map("events")
+}
+
+// ---------------------------------------------------------------------------
+// Polls
+//
+// "When are you free?" gets silence; "Thursday or Saturday?" gets answers. So the unit of
+// coordination is a poll with concrete dated options rather than an availability grid, and the
+// whole thing is reachable from one link somebody drops in the family chat.
+// ---------------------------------------------------------------------------
+
+enum PollStatus {
+  OPEN
+  SETTLED
+}
+
+enum ReplyKind {
+  YES
+  MAYBE
+  NO
+}
+
+model Poll {
+  id     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title  String
+  status PollStatus @default(OPEN)
+
+  // The option the family landed on. Unique because an option can settle at most one poll, which
+  // is what lets Prisma express this as a relation rather than a bare column with a hand-written
+  // constraint. SetNull rather than Cascade: deleting one option must not silently un-settle a
+  // poll the family has already acted on.
+  settledOptionId String?     @unique @map("settled_option_id") @db.Uuid
+  settledOption   PollOption? @relation("PollSettledOption", fields: [settledOptionId], references: [id], onDelete: SetNull)
+  settledAt       DateTime?   @map("settled_at")
+
+  // Nullable with SetNull, matching Event: a poll is a record of something the family decided,
+  // and losing it because an account was removed is worse than losing the attribution for it.
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  options PollOption[] @relation("PollOptions")
+
+  @@index([status, createdAt])
+  @@map("polls")
+}
+
+// A candidate date. `endsOn` is the *last day*, inclusive — the same convention as `Stay`, so a
+// single-day option has matching dates and a holiday week is the same shape with a wider range.
+// Weekly polls are almost always single days.
+model PollOption {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pollId    String   @map("poll_id") @db.Uuid
+  poll      Poll     @relation("PollOptions", fields: [pollId], references: [id], onDelete: Cascade)
+  startsOn  DateTime @map("starts_on") @db.Date
+  endsOn    DateTime @map("ends_on") @db.Date
+  sortOrder Int      @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  replies    PollReply[]
+  settledFor Poll?       @relation("PollSettledOption")
+
+  @@index([pollId, sortOrder])
+  @@map("poll_options")
+}
+
+model PollReply {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  optionId  String     @map("option_id") @db.Uuid
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  profileId String     @map("profile_id") @db.Uuid
+  profile   Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  kind      ReplyKind
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  // One answer per person per option: changing your mind is an update, not a second row. Without
+  // this the tally double-counts somebody who tapped twice, which is the most likely thing to
+  // happen on a phone.
+  @@unique([optionId, profileId])
+  @@index([profileId])
+  @@map("poll_replies")
 }

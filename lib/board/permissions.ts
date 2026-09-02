@@ -9,6 +9,11 @@ import { FamilyRole } from "@/generated/prisma/enums";
  */
 
 export interface Actor {
+  /**
+   * The Better Auth user id — named to match `FamilyUser.id` so a signed-in user satisfies this
+   * shape directly. `Poll.createdById` points here, not at the profile.
+   */
+  id: string;
   profileId: string | null;
   role: FamilyRole | null;
 }
@@ -29,4 +34,39 @@ export function canEditProfile(actor: Actor, profileId: string): boolean {
   if (actor.role === FamilyRole.PARENT) return true;
   if (actor.profileId === null) return false;
   return actor.profileId === profileId;
+}
+
+/**
+ * Who may answer as a given person: only that person.
+ *
+ * Deliberately stricter than `canEditProfile`, which lets a parent fix anyone's travel dates. The
+ * asymmetry is the point. Editing a stay is administration — a correction to a fact about the
+ * world. Answering a poll is a statement of intent in somebody's own voice, and a parent tapping
+ * "yes" on a kid's behalf does not record what the kid meant, it records what the parent hopes.
+ * A tally built from that is worse than an empty one, because it looks answered.
+ *
+ * There is deliberately no `canCreatePoll`. Anyone with a profile may start one, and a predicate
+ * that always returned true would only be an invitation to close it later.
+ */
+export function canReplyAsProfile(actor: Actor, profileId: string): boolean {
+  if (actor.profileId === null) return false;
+  return actor.profileId === profileId;
+}
+
+/**
+ * Who may settle or delete a poll: whoever asked, or either parent.
+ *
+ * The parent escalation is housekeeping — polls get abandoned, and somebody has to be able to
+ * close one that Macy started and forgot. It is authority over the *poll*, not over the answer,
+ * which is why it stops here and does not extend to `canReplyAsProfile`.
+ *
+ * A poll whose creator has since been removed (`createdById` is null) falls to the parents alone.
+ */
+export function canManagePoll(
+  actor: Actor,
+  createdByUserId: string | null,
+): boolean {
+  if (actor.profileId === null) return false;
+  if (actor.role === FamilyRole.PARENT) return true;
+  return createdByUserId !== null && actor.id === createdByUserId;
 }

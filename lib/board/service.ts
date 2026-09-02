@@ -1,5 +1,6 @@
 import "server-only";
 
+import { PollStatus, type ReplyKind } from "@/generated/prisma/enums";
 import { type CalendarDate, dbDateFromCalendarDate } from "@/lib/dates";
 import { prisma } from "@/lib/prisma";
 
@@ -66,4 +67,164 @@ function toRow(input: StayInput) {
     // Empty is absent. A whitespace-only note renders as a blank line on the board.
     note: input.note?.trim() ? input.note.trim() : null,
   };
+}
+
+/**
+ * Polls.
+ *
+ * Same contract as the stay writes above: auth-free, because the caller has already established
+ * who is acting and whether they may.
+ */
+
+export interface PollOptionInput {
+  startsOn: CalendarDate;
+  /** Last day of the option, inclusive — matching `Stay`. A single day has matching dates. */
+  endsOn: CalendarDate;
+}
+
+export interface PollInput {
+  title: string;
+  /** The user who asked. Null only for a poll created outside a session. */
+  createdById: string | null;
+  options: readonly PollOptionInput[];
+}
+
+/**
+ * Create a poll and its options in one transaction.
+ *
+ * `sortOrder` is assigned here from the *sorted* options rather than from input order, so the
+ * ballot reads chronologically however the form happened to submit them. Duplicate dates are
+ * dropped: two identical options are not a choice, and a tally split across them would understate
+ * both.
+ */
+export async function createPoll(input: PollInput): Promise<{ id: string }> {
+  const options = normalizeOptions(input.options);
+  if (options.length === 0) {
+    throw new Error("A poll needs at least one date");
+  }
+
+  const poll = await prisma.poll.create({
+    data: {
+      title: input.title.trim(),
+      createdById: input.createdById,
+      options: {
+        create: options.map((option, index) => ({
+          startsOn: dbDateFromCalendarDate(option.startsOn),
+          endsOn: dbDateFromCalendarDate(option.endsOn),
+          sortOrder: index,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  return poll;
+}
+
+/**
+ * Record one person's answer to one option.
+ *
+ * An upsert on the unique pair, so changing your mind updates the row rather than adding a second
+ * one — which is the most likely thing to happen on a phone, and the thing that would otherwise
+ * make the tally count somebody twice.
+ *
+ * `optionId` is trusted to belong to a poll the caller may answer because every option belongs to
+ * a poll every family member may answer; there is no per-poll audience. What is *not* trusted is
+ * `profileId`, which the action checks against the session before calling in.
+ */
+export async function replyToPoll(
+  optionId: string,
+  profileId: string,
+  kind: ReplyKind,
+): Promise<void> {
+  await prisma.pollReply.upsert({
+    where: { optionId_profileId: { optionId, profileId } },
+    update: { kind },
+    create: { optionId, profileId, kind },
+  });
+}
+
+/** Clear one person's answer, putting them back to silent rather than to a no. */
+export async function clearReply(
+  optionId: string,
+  profileId: string,
+): Promise<void> {
+  await prisma.pollReply.deleteMany({ where: { optionId, profileId } });
+}
+
+/**
+ * Settle a poll on one of its own options.
+ *
+ * The option is looked up scoped to the poll first. Without that scope a caller could settle a
+ * poll on an option belonging to a different one, and the ballot would then render a chosen date
+ * that appears nowhere among its own choices.
+ *
+ * Returns false rather than throwing on a mismatch, so the action can turn it into a field error;
+ * a thrown error reaches the client as an opaque production digest.
+ */
+export async function settlePoll(
+  pollId: string,
+  optionId: string,
+): Promise<boolean> {
+  const option = await prisma.pollOption.findFirst({
+    where: { id: optionId, pollId },
+    select: { id: true },
+  });
+  if (!option) return false;
+
+  await prisma.poll.update({
+    where: { id: pollId },
+    data: {
+      status: PollStatus.SETTLED,
+      settledOptionId: optionId,
+      settledAt: new Date(),
+    },
+  });
+  return true;
+}
+
+/** Reopen a settled poll — somebody's plans changed, which is ordinary. */
+export async function reopenPoll(pollId: string): Promise<void> {
+  await prisma.poll.update({
+    where: { id: pollId },
+    data: {
+      status: PollStatus.OPEN,
+      settledOptionId: null,
+      settledAt: null,
+    },
+  });
+}
+
+export async function deletePoll(pollId: string): Promise<void> {
+  await prisma.poll.delete({ where: { id: pollId } });
+}
+
+/**
+ * Sorted, de-duplicated, and validated.
+ *
+ * Duplicate dates are dropped rather than rejected: submitting the same day twice is a slip, not
+ * a decision, and splitting a tally across two identical options would understate both of them.
+ *
+ * Exported for the same reason `isValidRange` is — this module is callable without going through
+ * a form, so the guard has to live here and be testable directly.
+ */
+export function normalizeOptions(
+  options: readonly PollOptionInput[],
+): PollOptionInput[] {
+  const seen = new Set<string>();
+  const kept: PollOptionInput[] = [];
+  for (const option of options) {
+    if (!isValidRange(option.startsOn, option.endsOn)) {
+      throw new Error(
+        `Option ends (${option.endsOn}) before it starts (${option.startsOn})`,
+      );
+    }
+    const key = `${option.startsOn}/${option.endsOn}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(option);
+  }
+  return kept.sort(
+    (a, b) =>
+      a.startsOn.localeCompare(b.startsOn) || a.endsOn.localeCompare(b.endsOn),
+  );
 }
