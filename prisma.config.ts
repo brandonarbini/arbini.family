@@ -1,5 +1,10 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
+
+// Match `pnpm db:seed`: explicit shell/CI variables win, then `.env.local`, then `.env`. Loading
+// both here matters because Prisma passes this process's environment to the seed subprocess,
+// where tsx's `--env-file` flags cannot replace an already-defined variable.
+config({ path: [".env.local", ".env"], quiet: true });
 
 // The CLI's connection string, which is not always the app's. `prisma migrate deploy` takes a
 // Postgres advisory lock, and a pooler in transaction mode hands consecutive statements to
@@ -25,7 +30,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "tsx prisma/seed.ts",
+    // Delegate to the package script rather than repeating its env-file flags. Both entry points
+    // now resolve the same layered environment before the seed imports the application config.
+    seed: "pnpm db:seed",
   },
   datasource: {
     url: migrationUrl!,
