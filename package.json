@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm dev:web",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local prisma/seed.ts",
+    "db:provision": "tsx scripts/provision-family.ts",
     "prisma:initialize": "prisma generate && prisma migrate deploy",
     "postinstall": "prisma generate",
     "test:env": "dotenv -e .env -e .env.test -o --",
