@@ -37,9 +37,10 @@ export interface OptionView {
    * Measured against the poll's own place, not against home. A "Beach day?" poll that reported
    * everyone as present because they were all at home would be exactly backwards.
    *
-   * The whole reason `Profile.defaultPlaceId` exists shows up here: four of the five are home by
-   * default and their line is empty, but Addison is on campus, and nobody should propose a
-   * Thursday without seeing that. Derived, never stored.
+   * Built from recorded stays alone, so the line is empty until somebody has said where they will
+   * be. Silence here means nothing is known, not that everyone is free — the tally is what says
+   * who can come, and this only flags the days a recorded stay already contradicts. Derived,
+   * never stored.
    */
   awayNotes: { member: FamilyMember; place: Place }[];
 }
@@ -73,7 +74,7 @@ export async function getPollView(
   const talliesById = new Map(tallies.map((tally) => [tally.optionId, tally]));
 
   // Bounded by the options themselves rather than by a fixed horizon: a poll about Thanksgiving
-  // is months out, and a 30-day window would report everyone as home by default.
+  // is months out, and a 30-day window would load none of the stays that cover it.
   const earliest = poll.options.reduce<CalendarDate | null>(
     (min, option) =>
       min === null || option.startsOn < min ? option.startsOn : min,
@@ -102,21 +103,13 @@ export async function getPollView(
   const membersByProfileId = new Map(
     members.map((member) => [member.profileId, member]),
   );
-  const defaults = new Map(
-    members.map((member) => [member.profileId, member.defaultPlaceId]),
-  );
 
   const options: OptionView[] = poll.options.map((option) => {
     // One entry per person, not per day: "Addison's at Vanguard" reads as context, whereas the
     // same sentence repeated for each day of a long weekend reads as an error message.
     const away = new Map<string, Place>();
     for (const day of eachCalendarDay(option.startsOn, option.endsOn)) {
-      for (const [profileId, placeId] of locationsOn(
-        stays,
-        profileIds,
-        day,
-        defaults,
-      )) {
+      for (const [profileId, placeId] of locationsOn(stays, profileIds, day)) {
         if (placeId === null || away.has(profileId)) continue;
         if (gatheringPlace && placeId === gatheringPlace.id) continue;
         const place = placesById.get(placeId);

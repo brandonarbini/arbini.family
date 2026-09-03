@@ -32,14 +32,12 @@ export const VANGUARD = "Vanguard";
  * Each address must also appear in `FAMILY_EMAILS` or that person cannot sign in. The allowlist is
  * checked before any mail goes out, and a seeded account is not itself permission to enter.
  *
- * `livesAt` is where the board places somebody on a day no stay covers. Four of them live at home
- * and Addison is on campus, which is the whole reason the column exists: without it the board asks
- * everyone to record the days nothing is happening, and the answer to that request is silence.
+ * Nobody is seeded with a location. Where a person is comes from a stay they recorded or a poll
+ * they said yes to, never from a fact this file asserts on their behalf.
  */
 export const FAMILY = [
   {
     email: "b@arbini.com",
-    livesAt: HOME,
     name: "Brandon Arbini",
     role: FamilyRole.PARENT,
     sortOrder: 0,
@@ -48,7 +46,6 @@ export const FAMILY = [
   },
   {
     email: "jill@arbini.com",
-    livesAt: HOME,
     name: "Jill Arbini",
     role: FamilyRole.PARENT,
     sortOrder: 10,
@@ -57,7 +54,6 @@ export const FAMILY = [
   },
   {
     email: "tanner@arbini.com",
-    livesAt: HOME,
     name: "Tanner Arbini",
     role: FamilyRole.KID,
     sortOrder: 20,
@@ -66,7 +62,6 @@ export const FAMILY = [
   },
   {
     email: "addison@arbini.com",
-    livesAt: VANGUARD,
     name: "Addison Arbini",
     role: FamilyRole.KID,
     sortOrder: 30,
@@ -75,7 +70,6 @@ export const FAMILY = [
   },
   {
     email: "macy@arbini.com",
-    livesAt: HOME,
     name: "Macy Arbini",
     role: FamilyRole.KID,
     sortOrder: 40,
@@ -90,8 +84,9 @@ export const FAMILY = [
  * `Place.isHome` is what the board leans on to tell "at home" from "away", and the schema asks for
  * exactly one row carrying it — so it is written here rather than left to be created by hand.
  *
- * Vanguard is written alongside it because Addison lives there, and a default place that does not
- * exist yet is not a default. Both are upserts keyed on `name`, which is unique.
+ * Vanguard is written alongside it because it is the other place this family reckons from, and a
+ * place has to exist before anyone can record a stay at it. Both are upserts keyed on `name`,
+ * which is unique.
  */
 export async function provisionPlaces(): Promise<Map<string, string>> {
   const places = await Promise.all([
@@ -116,12 +111,8 @@ export async function provisionPlaces(): Promise<Map<string, string>> {
  * `emailVerified` is true because the address is one we put in the allowlist ourselves, not one
  * somebody claimed at sign-up.
  */
-export async function provisionFamily(
-  placeIds: Map<string, string>,
-): Promise<void> {
+export async function provisionFamily(): Promise<void> {
   for (const person of FAMILY) {
-    const defaultPlaceId = placeIds.get(person.livesAt) ?? null;
-
     const user = await prisma.user.upsert({
       where: { email: person.email },
       // Empty on purpose: an established account is never rewritten. Re-running this against a
@@ -138,7 +129,6 @@ export async function provisionFamily(
         role: person.role,
         sortOrder: person.sortOrder,
         color: person.color,
-        defaultPlaceId,
         birthday: person.birthday
           ? new Date(`${person.birthday}T00:00:00Z`)
           : null,
@@ -148,7 +138,6 @@ export async function provisionFamily(
         role: person.role,
         sortOrder: person.sortOrder,
         color: person.color,
-        defaultPlaceId,
         birthday: person.birthday
           ? new Date(`${person.birthday}T00:00:00Z`)
           : null,

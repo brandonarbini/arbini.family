@@ -173,17 +173,18 @@ export async function clearReply(
  * One `Event`, always — the whole point of settling is that the date lands on the board's agenda
  * rather than living inside a poll nobody reopens.
  *
- * Then a `Stay`, but **only for people who said yes and who do not already live at the gathering
- * place.** Both halves of that are deliberate:
+ * Then a `Stay` for everybody who said yes, and for nobody else. Both halves of that are
+ * deliberate:
  *
  * - *Only yes.* Writing a stay for somebody who said no, or who never answered, would be the app
  *   inventing a fact about a person. That is the thing the board refuses to do everywhere else —
  *   it is why an unrecorded day reads "not recorded" rather than "home" — and settling a poll is
  *   not a licence to start.
- * - *Only travel.* Somebody whose declared home is already the gathering place needs no stay:
- *   `locationsOn` puts them there by default, so the row would add nothing to the board while
- *   adding five rows a week to the stay editor. A stay records the exception, which here means
- *   Addison coming home — the one fact nothing else in the system knows.
+ * - *Every yes, including the people who are usually there anyway.* Nothing else puts a person
+ *   anywhere: the board has no notion of where somebody lives, so a day no stay covers is
+ *   unknown. Skipping the stay for whoever is normally home would leave `findNextGathering` with
+ *   a gap on the very date the family just agreed on, and the countdown would never fire. Saying
+ *   yes to a date *is* the location signal, and this is where it gets recorded.
  *
  * The writes happen in a transaction that first clears anything a previous settlement left, so
  * settle → reopen → settle elsewhere leaves no ghosts. That idempotence is what makes this safe
@@ -217,22 +218,9 @@ export async function settlePoll(
     )?.id ??
     null;
 
-  const travellers = place
+  const attendees = place
     ? await prisma.pollReply.findMany({
-        where: {
-          optionId,
-          kind: ReplyKind.YES,
-          // The "only travel" half of the rule, expressed as a filter rather than as a loop over
-          // everyone, so there is no window in which the wrong set has been assembled.
-          profile: {
-            is: {
-              OR: [
-                { defaultPlaceId: null },
-                { defaultPlaceId: { not: place } },
-              ],
-            },
-          },
-        },
+        where: { optionId, kind: ReplyKind.YES },
         select: { profileId: true },
       })
     : [];
@@ -262,7 +250,7 @@ export async function settlePoll(
         pollId,
       },
     }),
-    ...travellers.map((reply) =>
+    ...attendees.map((reply) =>
       prisma.stay.create({
         data: {
           profileId: reply.profileId,

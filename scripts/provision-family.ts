@@ -48,7 +48,7 @@ async function main() {
   }
 
   const placeIds = await provisionPlaces();
-  await provisionFamily(placeIds);
+  await provisionFamily();
   console.log(
     `Provisioned ${FAMILY.length} family member(s) and ${placeIds.size} place(s) into ${target}: ${[...placeIds.keys()].join(", ")}.`,
   );

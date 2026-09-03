@@ -25,7 +25,7 @@ function assertNotProduction(): void {
 async function main() {
   assertNotProduction();
   const placeIds = await provisionPlaces();
-  await provisionFamily(placeIds);
+  await provisionFamily();
   console.log(
     `Seeded ${FAMILY.length} family member(s) and ${placeIds.size} place(s): ${[...placeIds.keys()].join(", ")}.`,
   );
