@@ -17,16 +17,12 @@ import { prisma } from "@/lib/prisma";
  * file share the worker's database.
  */
 
-async function makeProfile(
-  name: string,
-  role: FamilyRole = FamilyRole.KID,
-  defaultPlaceId: string | null = null,
-) {
+async function makeProfile(name: string, role: FamilyRole = FamilyRole.KID) {
   const user = await prisma.user.create({
     data: { email: `${name}@example.test`, name, emailVerified: true },
   });
   const profile = await prisma.profile.create({
-    data: { userId: user.id, role, sortOrder: 0, defaultPlaceId },
+    data: { userId: user.id, role, sortOrder: 0 },
   });
   return { userId: user.id, profileId: profile.id };
 }
@@ -239,18 +235,11 @@ describe("settlePoll", () => {
  */
 describe("settlePoll writes to the board", () => {
   let home: Awaited<ReturnType<typeof makePlace>>;
-  let vanguard: Awaited<ReturnType<typeof makePlace>>;
   let addison: Awaited<ReturnType<typeof makeProfile>>;
 
   beforeEach(async () => {
     home = await makePlace("Home", true);
-    vanguard = await makePlace("Vanguard");
-    // Brandon was seeded by the outer beforeEach without a default; give him home like the family.
-    await prisma.profile.update({
-      where: { id: brandon.profileId },
-      data: { defaultPlaceId: home.id },
-    });
-    addison = await makeProfile("addison", FamilyRole.KID, vanguard.id);
+    addison = await makeProfile("addison", FamilyRole.KID);
   });
 
   async function settleFirstOption(pollId: string) {
@@ -291,58 +280,37 @@ describe("settlePoll writes to the board", () => {
     expect(event.note).toBe("2026-11-25 to 2026-11-29");
   });
 
-  it("writes a stay for somebody who said yes and lives elsewhere", async () => {
-    // Addison coming home is the one fact nothing else in the system knows, so it is the one
-    // thing settling has to record.
+  it("writes a stay for everybody who said yes", async () => {
+    // The stay is the whole point: nothing else in the system puts a person anywhere, so a yes
+    // that wrote no row would leave the board with a gap on the date the family just agreed on.
     const { id } = await makePoll();
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
     });
     await replyToPoll(option.id, addison.profileId, ReplyKind.YES);
-    await settlePoll(id, option.id);
-
-    const stays = await prisma.stay.findMany({ where: { pollId: id } });
-    expect(stays).toHaveLength(1);
-    expect(stays[0].profileId).toBe(addison.profileId);
-    expect(stays[0].placeId).toBe(home.id);
-    expect(stays[0].startsOn.toISOString()).toBe(option.startsOn.toISOString());
-    expect(stays[0].endsOn?.toISOString()).toBe(option.endsOn.toISOString());
-  });
-
-  it("writes a stay for somebody who said yes and has no default place", async () => {
-    const noDefault = await makeProfile("no-default");
-    const { id } = await makePoll();
-    const option = await prisma.pollOption.findFirstOrThrow({
-      where: { pollId: id },
-    });
-    await replyToPoll(option.id, noDefault.profileId, ReplyKind.YES);
-
-    await settlePoll(id, option.id);
-
-    const stay = await prisma.stay.findFirstOrThrow({
-      where: { pollId: id, profileId: noDefault.profileId },
-    });
-    expect(stay.placeId).toBe(home.id);
-  });
-
-  it("writes no stay for somebody who already lives at the gathering place", async () => {
-    // `locationsOn` puts Brandon at home by default, so the row would add nothing to the board
-    // while adding one to the stay editor every week.
-    const { id } = await makePoll();
-    const option = await prisma.pollOption.findFirstOrThrow({
-      where: { pollId: id },
-    });
     await replyToPoll(option.id, brandon.profileId, ReplyKind.YES);
     await settlePoll(id, option.id);
 
-    expect(await prisma.stay.count({ where: { pollId: id } })).toBe(0);
+    const stays = await prisma.stay.findMany({
+      where: { pollId: id },
+      orderBy: { profileId: "asc" },
+    });
+    expect(stays).toHaveLength(2);
+    expect(stays.map((stay) => stay.profileId).sort()).toEqual(
+      [addison.profileId, brandon.profileId].sort(),
+    );
+    for (const stay of stays) {
+      expect(stay.placeId).toBe(home.id);
+      expect(stay.startsOn.toISOString()).toBe(option.startsOn.toISOString());
+      expect(stay.endsOn?.toISOString()).toBe(option.endsOn.toISOString());
+    }
   });
 
   it("writes no stay for a no, a maybe, or a silence", async () => {
     // The line the whole board is built on: never invent a fact about a person. A stay written
     // for somebody who declined would say they are somewhere they said they would not be.
-    const tanner = await makeProfile("tanner", FamilyRole.KID, vanguard.id);
-    const macy = await makeProfile("macy", FamilyRole.KID, vanguard.id);
+    const tanner = await makeProfile("tanner");
+    const macy = await makeProfile("macy");
     const { id } = await makePoll();
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
@@ -380,7 +348,6 @@ describe("settlePoll writes to the board", () => {
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
     });
-    // Brandon lives at home, so a beach gathering *is* travel for him.
     await replyToPoll(option.id, brandon.profileId, ReplyKind.YES);
     await settlePoll(id, option.id);
 

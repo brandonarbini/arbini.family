@@ -154,23 +154,12 @@ model Profile {
   // Accent colour for this person across the board, so a row is identifiable at a glance.
   color          String?
   sortOrder      Int        @map("sort_order")
-  // Where this person lives when nothing says otherwise.
-  //
-  // The board treats an unrecorded day as *unknown* rather than assuming home, because an
-  // inferred default would make the gathering countdown confidently wrong. A declared default is
-  // not an inference: it is this person stating where they reside, so `locationsOn` may fall back
-  // to it. Null keeps the old behaviour — unknown stays unknown.
-  //
-  // Restrict, matching Stay: deleting a place must not silently strip four people of their home.
-  defaultPlaceId String?    @map("default_place_id") @db.Uuid
-  defaultPlace   Place?     @relation(fields: [defaultPlaceId], references: [id], onDelete: Restrict)
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
 
   stays       Stay[]
   pollReplies PollReply[]
 
-  @@index([defaultPlaceId])
   @@map("profiles")
 }
 
@@ -190,10 +179,8 @@ model Place {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  stays     Stay[]
-  // People who live here. See `Profile.defaultPlaceId`.
-  residents Profile[]
-  polls     Poll[]
+  stays Stay[]
+  polls Poll[]
 
   @@map("places")
 }

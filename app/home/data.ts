@@ -40,18 +40,10 @@ export const AGENDA_WINDOW_DAYS = 30;
 
 export interface MemberPresence {
   member: FamilyMember;
-  /** Where they are today, or `null` when nothing is recorded and they have no declared home. */
+  /** Where a stay puts them today, or `null` when nothing is recorded. */
   place: Place | null;
   /** Last day at that place; `null` for an open-ended stay or when nothing is recorded. */
   until: CalendarDate | null;
-  /**
-   * True when `place` is where they live rather than somewhere a stay put them.
-   *
-   * The board renders the two differently. A stay is news — somebody went somewhere, and it ends
-   * on a date. A default is the absence of news, and dressing it up as a recorded fact would
-   * overstate what anyone actually said.
-   */
-  isDefault: boolean;
 }
 
 export interface NextGathering {
@@ -74,21 +66,15 @@ export async function getBoardView(today: CalendarDate) {
   const placesById = new Map(places.map((place) => [place.id, place]));
   const profileIds = members.map((member) => member.profileId);
 
-  // Where each person is when no stay says otherwise. Built once and threaded through both the
-  // per-person rows and the countdown, so the two can never disagree about where somebody is.
-  const defaults = new Map(
-    members.map((member) => [member.profileId, member.defaultPlaceId]),
-  );
-
+  // `staysOn` rather than `locationsOn`: the row reports not just where somebody is but until
+  // when, and that needs the whole stay.
   const covering = staysOn(stays, profileIds, today);
   const presence: MemberPresence[] = members.map((member) => {
     const stay = covering.get(member.profileId) ?? null;
-    const placeId = stay?.placeId ?? member.defaultPlaceId;
     return {
       member,
-      place: placeId ? (placesById.get(placeId) ?? null) : null,
+      place: stay ? (placesById.get(stay.placeId) ?? null) : null,
       until: stay?.endsOn ?? null,
-      isDefault: stay === null && member.defaultPlaceId !== null,
     };
   });
 
@@ -97,7 +83,6 @@ export async function getBoardView(today: CalendarDate) {
     profileIds,
     today,
     GATHERING_HORIZON_DAYS,
-    defaults,
   );
   const gatheringPlace = found ? placesById.get(found.placeId) : undefined;
   const gathering: NextGathering | null =
