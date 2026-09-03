@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import {
   type ActionResult,
   deletePasskeySchema,
@@ -38,5 +39,10 @@ export async function removePasskey(
     return { ok: false, formError: "That passkey no longer exists." };
   }
 
+  // Without this the action never sets `pathWasRevalidated`, so Next skips re-rendering the page
+  // and the passkey just deleted stays in the list — a delete that worked reads as one that failed.
+  // `refresh` rather than `updateTag`: `getPasskeys` in ./data.ts is deliberately uncached, so there
+  // is no tag to invalidate, and `refresh` revalidates exactly that dynamic read.
+  refresh();
   return { ok: true };
 }
