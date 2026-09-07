@@ -38,6 +38,11 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Where I am</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="mappin.and.ellipse" drawable="ic_menu_mylocation" />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="account">
+        <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.crop.circle" drawable="ic_menu_myplaces" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

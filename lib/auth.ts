@@ -7,6 +7,7 @@ import { bearer, magicLink } from "better-auth/plugins";
 import { sendMagicLinkEmail } from "@/lib/email";
 import { env } from "@/lib/env/server";
 import { isFamilyEmail, parseFamilyEmails } from "@/lib/family";
+import { APP_URL_SCHEME } from "@/lib/native-app";
 import { prisma } from "@/lib/prisma";
 import { resolveBaseUrl, resolveRpId } from "@/lib/urls";
 
@@ -29,14 +30,14 @@ const FAMILY_ALLOWLIST = parseFamilyEmails(env.FAMILY_EMAILS);
 const MAGIC_LINK_TTL_SECONDS = 600;
 
 /**
- * The native app's URL scheme, declared as `scheme` in mobile/app.json.
+ * Where the native app may be sent once it has proved who it is.
  *
  * Pinned to a path rather than the bare scheme. Better Auth matches custom-scheme origins on
  * scheme, authority and path (see `dist/auth/trusted-origins.mjs`, which parses them with string
  * operations rather than `new URL()` because non-special schemes parse inconsistently across
  * runtimes). `arbinifamily://` alone would trust every destination in the app; this trusts one.
  */
-const APP_CALLBACK_ORIGIN = "arbinifamily://auth";
+const APP_CALLBACK_ORIGIN = `${APP_URL_SCHEME}://auth`;
 
 export const auth = betterAuth({
   // Pinned from configuration, never from the `Host` header — see lib/urls.ts.

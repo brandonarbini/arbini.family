@@ -1,4 +1,5 @@
 import { expoClient } from '@better-auth/expo/client';
+import { expoPasskeyClient } from '@lobehub/expo-better-auth-passkey';
 import { createAuthClient } from 'better-auth/react';
 import { magicLinkClient } from 'better-auth/client/plugins';
 import * as SecureStore from 'expo-secure-store';
@@ -26,6 +27,22 @@ export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   plugins: [
     magicLinkClient(),
+    /**
+     * Passkeys, through the platform credential APIs rather than WebAuthn.
+     *
+     * `expoPasskeyClient()` is a drop-in for the web's `passkeyClient()` — same
+     * `signIn.passkey()` and `passkey.addPasskey()` surface — that swaps `navigator.credentials`,
+     * which React Native does not have, for `ASAuthorizationController` on iOS and Credential
+     * Manager on Android. The *server* needs no change at all: `passkey()` in lib/auth.ts speaks
+     * the WebAuthn protocol, and only the thing producing the attestation differs.
+     *
+     * Because `rpID` is the hostname of the canonical origin, a passkey registered in the browser
+     * at arbini.family is the same credential this app offers. One registration, not two.
+     *
+     * Requires a development or release build — it is a native module, so Expo Go cannot load it
+     * — and an associated domain, which is why app.json carries `ios.associatedDomains`.
+     */
+    expoPasskeyClient(),
     expoClient({
       scheme: 'arbinifamily',
       storagePrefix: 'arbinifamily',

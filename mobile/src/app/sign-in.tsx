@@ -1,13 +1,5 @@
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput } from 'react-native';
 
 import { Page } from '@/components/page';
 import { Copy, Section } from '@/components/section';
@@ -15,7 +7,7 @@ import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { authClient } from '@/lib/auth-client';
 
-type Status = 'idle' | 'sending' | 'sent' | 'error';
+type Status = 'idle' | 'sending' | 'sent' | 'passkey' | 'error';
 
 /**
  * Sign-in by emailed link, the native counterpart of `app/signin/signin-form.tsx`.
@@ -26,9 +18,10 @@ type Status = 'idle' | 'sending' | 'sent' | 'error';
  * is in the family. A screen that said "no such account" would hand that back. So there is one
  * "check your email" state, reached whenever the request itself succeeded.
  *
- * No passkey button. Passkeys are WebAuthn, which needs `navigator.credentials` — absent in React
- * Native. Adding them here means a native module plus associated-domains setup; until then the
- * long session lifetime in lib/auth.ts is what keeps this screen rare.
+ * The passkey button goes through the platform credential APIs rather than WebAuthn, and needs a
+ * development or release build plus a reachable association document — so in Expo Go it is present
+ * but will fail. That is deliberate: hiding it in Expo Go would mean the screen you develop
+ * against is not the screen you ship.
  */
 export default function SignInScreen() {
   const theme = useTheme();
@@ -63,6 +56,24 @@ export default function SignInScreen() {
     setStatus('sent');
   }
 
+  async function signInWithPasskey() {
+    Keyboard.dismiss();
+    setStatus('passkey');
+    setError(null);
+
+    // No email argument. The platform sheet lists whichever credentials are registered for this
+    // domain on this device, so asking who you are first would be asking a question the phone can
+    // already answer.
+    const result = await authClient.signIn.passkey();
+
+    if (result?.error) {
+      setStatus('error');
+      setError('That didn’t work. Use the email link instead, then add a passkey from Account.');
+      return;
+    }
+    // On success the session lands in the keychain and the gate in _layout.tsx navigates.
+  }
+
   if (status === 'sent') {
     return (
       <Page dateline="Sign in">
@@ -79,7 +90,7 @@ export default function SignInScreen() {
     );
   }
 
-  const busy = status === 'sending';
+  const busy = status === 'sending' || status === 'passkey';
 
   return (
     <Page dateline="Sign in">
@@ -102,9 +113,7 @@ export default function SignInScreen() {
           style={[styles.input, { color: theme.text, borderColor: theme.border }]}
         />
 
-        {error ? (
-          <Copy style={[styles.error, { color: theme.destructive }]}>{error}</Copy>
-        ) : null}
+        {error ? <Copy style={[styles.error, { color: theme.destructive }]}>{error}</Copy> : null}
 
         <Pressable
           onPress={requestMagicLink}
@@ -117,10 +126,30 @@ export default function SignInScreen() {
             },
           ]}
         >
-          {busy ? (
+          {status === 'sending' ? (
             <ActivityIndicator color={theme.background} />
           ) : (
             <Text style={[styles.buttonLabel, { color: theme.background }]}>SEND THE LINK</Text>
+          )}
+        </Pressable>
+      </Section>
+
+      <Section title="Or">
+        <Copy muted>
+          If you have already added a passkey — here or on the web — Face ID is enough.
+        </Copy>
+        <Pressable
+          onPress={signInWithPasskey}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            { borderColor: theme.text, opacity: busy ? 0.4 : pressed ? 0.6 : 1 },
+          ]}
+        >
+          {status === 'passkey' ? (
+            <ActivityIndicator color={theme.text} />
+          ) : (
+            <Text style={[styles.buttonLabel, { color: theme.text }]}>USE A PASSKEY</Text>
           )}
         </Pressable>
       </Section>
@@ -154,6 +183,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 1.8,
+  },
+  secondaryButton: {
+    marginTop: Spacing.three,
+    borderRadius: Radius,
+    borderWidth: 1,
+    paddingVertical: Spacing.three,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   linkButton: {
     marginTop: Spacing.three,

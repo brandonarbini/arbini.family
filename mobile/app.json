@@ -10,7 +10,8 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "family.arbini.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "associatedDomains": ["webcredentials:arbini.family"]
     },
     "android": {
       "adaptiveIcon": {
