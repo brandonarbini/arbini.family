@@ -1,8 +1,9 @@
+import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
-import { magicLink } from "better-auth/plugins";
+import { bearer, magicLink } from "better-auth/plugins";
 import { sendMagicLinkEmail } from "@/lib/email";
 import { env } from "@/lib/env/server";
 import { isFamilyEmail, parseFamilyEmails } from "@/lib/family";
@@ -27,6 +28,16 @@ const FAMILY_ALLOWLIST = parseFamilyEmails(env.FAMILY_EMAILS);
 /** Ten minutes: long enough to switch to a phone and find the mail, short enough to matter. */
 const MAGIC_LINK_TTL_SECONDS = 600;
 
+/**
+ * The native app's URL scheme, declared as `scheme` in mobile/app.json.
+ *
+ * Pinned to a path rather than the bare scheme. Better Auth matches custom-scheme origins on
+ * scheme, authority and path (see `dist/auth/trusted-origins.mjs`, which parses them with string
+ * operations rather than `new URL()` because non-special schemes parse inconsistently across
+ * runtimes). `arbinifamily://` alone would trust every destination in the app; this trusts one.
+ */
+const APP_CALLBACK_ORIGIN = "arbinifamily://auth";
+
 export const auth = betterAuth({
   // Pinned from configuration, never from the `Host` header — see lib/urls.ts.
   baseURL: resolveBaseUrl(),
@@ -45,6 +56,12 @@ export const auth = betterAuth({
   // `Account.password` column exists only because Better Auth's adapter expects it.
   emailAndPassword: { enabled: false },
 
+  // Where the native app may be sent after it proves who it is. The web's own origin is trusted
+  // implicitly; this adds the one custom scheme, and nothing else. The expo plugin additionally
+  // trusts `exp://` — but only when NODE_ENV is development, so the Expo Go convenience cannot
+  // reach production.
+  trustedOrigins: [APP_CALLBACK_ORIGIN],
+
   // Backed by the RateLimit table rather than in-memory counters, so the limits survive a cold
   // start. An in-process counter resets whenever a new instance boots, which is exactly the
   // moment an attacker benefits from it resetting.
@@ -53,6 +70,24 @@ export const auth = betterAuth({
     storage: "database",
     window: 60,
     max: 100,
+  },
+
+  /**
+   * Ninety days, refreshed at most once a day.
+   *
+   * Better Auth's default is seven, which suits a site you visit daily and not one you open when
+   * somebody asks where Tanner is. On the web an expired session costs a passkey tap; on the
+   * phone there are no passkeys yet — it costs finding an email — so the default would make the
+   * app annoying in exactly the way that gets it deleted.
+   *
+   * The cost is real and worth stating: this is one setting for both clients, so the browser's
+   * sessions get longer too. It buys a device that is signed in for a quarter, on an app whose
+   * contents are five people's travel dates. `updateAge` keeps that from meaning a write on every
+   * request.
+   */
+  session: {
+    expiresIn: 60 * 60 * 24 * 90,
+    updateAge: 60 * 60 * 24,
   },
 
   plugins: [
@@ -108,6 +143,29 @@ export const auth = betterAuth({
       rpName: "Arbini Family",
       origin: resolveBaseUrl(),
     }),
+
+    /**
+     * Native support. Registered after `magicLink()` because its work is an *after* hook on that
+     * plugin's endpoints: it matches `/magic-link/verify` (along with `/callback` and
+     * `/verify-email`) and, when the redirect target is an app scheme, copies the session cookie
+     * onto the `Location` as a `?cookie=` parameter. The client reads it back out of the deep link
+     * and puts it in SecureStore, which is how a device with no cookie jar ends up with a session.
+     *
+     * It also promotes an `expo-origin` header to `origin` on requests that carry none — a native
+     * fetch sends no `Origin`. That is not a hole: the promoted value still has to survive the
+     * same `trustedOrigins` check as any browser's.
+     */
+    expo(),
+
+    /**
+     * Lets a client present its session as `Authorization: Bearer <token>` instead of a cookie.
+     *
+     * Inert for the web: its `before` matcher is `Boolean(headers.get("authorization"))`, so it
+     * never fires on a cookie request. It is here so the pattern generalises — the Expo client
+     * sends a `Cookie` header today, but any non-Expo native client would want the bearer form,
+     * and swapping to it becomes a change in one file on the client rather than a server change.
+     */
+    bearer(),
 
     // Must stay last: nextCookies wraps the response so `Set-Cookie` reaches Next's cookie store
     // from Server Actions and Route Handlers. Registered anywhere else in this array and sign-in
