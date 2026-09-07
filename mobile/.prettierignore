@@ -1,0 +1,4 @@
+pnpm-lock.yaml
+.expo/
+dist/
+expo-env.d.ts

@@ -28,3 +28,7 @@ devcontainer exec --workspace-folder . pnpm test:run
 **ALWAYS prefix commands with:** `devcontainer exec --workspace-folder .`
 
 If the devcontainer is not running, **STOP** and ask the user to start it. Do not attempt workarounds or run commands on the host.
+
+**The one exception is `mobile/`**, the Expo app, which runs on the host — see the "Exception: the
+`mobile/` Expo app" section of AGENTS.md. Run its commands from `mobile/` on the host, and never
+run `pnpm install` at the repository root from the host.
