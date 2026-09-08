@@ -7,6 +7,7 @@ import type {
   CalendarDateString,
   GatheringDto,
   MeDto,
+  PasskeyDto,
   PlaceDto,
   PollDto,
   PollOptionDto,
@@ -26,6 +27,7 @@ import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
 import { AGENDA_WINDOW_DAYS } from "@/lib/board/view";
 import type { ProfileActor } from "@/lib/api/guard";
+import type { PasskeySummary } from "@/lib/passkeys/data";
 
 /**
  * Where internal shapes become the wire contract.
@@ -258,5 +260,20 @@ export function toPollDto(
       poll.status === "OPEN" &&
       tallies.some((tally) => tally.silentBy.includes(viewerProfileId)),
     options,
+  };
+}
+
+/**
+ * A passkey on the wire.
+ *
+ * Field-for-field identical to `PasskeySummary` today, and still worth writing down: the internal
+ * shape is free to gain `createdAt` or the raw `aaguid` the moment the website wants one, and this
+ * is where somebody has to decide whether the phone gets it too.
+ */
+export function toPasskeyDto(passkey: PasskeySummary): PasskeyDto {
+  return {
+    id: passkey.id,
+    label: passkey.label,
+    deviceType: passkey.deviceType,
   };
 }

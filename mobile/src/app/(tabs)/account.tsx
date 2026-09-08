@@ -1,42 +1,35 @@
-import * as Device from 'expo-device';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { PasskeyDto } from '@server/api/v1/dto';
 
 import { Page } from '@/components/page';
-import { Copy, Section } from '@/components/section';
+import { Copy, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { authClient, passkeysSupported } from '@/lib/auth-client';
+import {
+  useDeletePasskey,
+  useInvalidatePasskeys,
+  usePasskeys,
+  useRenamePasskey,
+} from '@/lib/queries';
 
-type Status = 'idle' | 'adding' | 'added' | 'error';
-
-/**
- * What this passkey is called in the list at arbini.family/account.
- *
- * The name is the only way to tell two credentials apart once they are in the list — there is
- * nothing else on screen but a date — so it is worth more than "This phone", which is true of
- * every phone and useful on none of them. The web's own `deviceLabel()` in
- * app/account/passkey-controls.tsx has to guess from a user-agent string and gets no further than
- * "iPhone or iPad"; here the device will simply say.
- *
- * `modelName` rather than `deviceName`: since iOS 16 the user-assigned name ("Brandon's iPhone")
- * is gated behind an entitlement Apple grants case by case, and without it `deviceName` returns
- * the model anyway — via an API that reads like it returns something better.
- */
-function passkeyName(): string {
-  return Device.modelName ?? 'iPhone';
-}
+type Status = 'idle' | 'adding' | 'error';
 
 /**
- * Account: add a passkey to this device, and sign out.
+ * Account: the passkeys on this account, and sign out.
  *
- * The counterpart of the web's `/account`. Registering has to happen somewhere you are *already*
- * signed in — a passkey is bound to an existing identity, not a way to claim one — which is why
- * this lives behind the tabs rather than next to the sign-in screen.
+ * The counterpart of the web's `/account`, and the same list — one credential can be reached from
+ * the phone and the website both, because `rpID` is the hostname either way. Registering has to
+ * happen somewhere you are *already* signed in — a passkey is bound to an existing identity, not a
+ * way to claim one — which is why this lives behind the tabs rather than next to the sign-in
+ * screen.
  */
 export default function AccountScreen() {
   const theme = useTheme();
   const { data: session } = authClient.useSession();
+  const passkeys = usePasskeys();
+  const invalidatePasskeys = useInvalidatePasskeys();
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -44,8 +37,12 @@ export default function AccountScreen() {
     setStatus('adding');
     setError(null);
 
-    const name = passkeyName();
-    const result = await authClient.passkey.addPasskey({ name });
+    // No name. See the note on the register-options request in `lib/passkey-client.ts`: the one
+    // Better Auth calls `name` is also WebAuthn's `user.name`, and a device label sent there is
+    // what files this credential in iCloud Keychain under "iPhone 17 Pro" instead of under your
+    // email address. Unnamed rows are named after their authenticator by the server — see
+    // `lib/passkeys/label.ts` on the web — and the row below renames.
+    const result = await authClient.passkey.addPasskey();
 
     if (result?.error) {
       // Cancelling is not a failure. The sheet was dismissed on purpose, and an error where an
@@ -77,7 +74,8 @@ export default function AccountScreen() {
       return;
     }
 
-    setStatus('added');
+    setStatus('idle');
+    await invalidatePasskeys();
   }
 
   return (
@@ -89,25 +87,39 @@ export default function AccountScreen() {
         </Copy>
       </Section>
 
-      <Section title="Passkey">
+      <Section title="Passkeys">
         {!passkeysSupported ? (
           <Copy muted>
             This build cannot add passkeys — it has no credential module. A development or release
             build can.
           </Copy>
-        ) : status === 'added' ? (
-          // Naming it back is not decoration: it is the string that will identify this credential
-          // on the website, and the only moment anyone can connect the two.
-          <Copy>Added as “{passkeyName()}”. Face ID will sign you in from now on.</Copy>
         ) : (
           <>
             <Copy muted>
               A passkey replaces the emailed link with Face ID. It is stored on this device and in
               your iCloud Keychain, and works on the website too.
             </Copy>
+
+            {passkeys.isPending ? (
+              <ActivityIndicator style={styles.listSpinner} color={theme.textSecondary} />
+            ) : passkeys.isError ? (
+              <Copy style={[styles.error, { color: theme.destructive }]}>
+                Could not load your passkeys.
+              </Copy>
+            ) : passkeys.data.length > 0 ? (
+              <View style={styles.list}>
+                <RuledList>
+                  {passkeys.data.map((passkey) => (
+                    <PasskeyRow key={passkey.id} passkey={passkey} />
+                  ))}
+                </RuledList>
+              </View>
+            ) : null}
+
             {error ? (
               <Copy style={[styles.error, { color: theme.destructive }]}>{error}</Copy>
             ) : null}
+
             <Pressable
               onPress={addPasskey}
               disabled={status === 'adding'}
@@ -135,6 +147,84 @@ export default function AccountScreen() {
   );
 }
 
+/**
+ * One passkey: what it is called, and the two things you can do to it.
+ *
+ * Renaming is the field itself rather than a button that reveals a field. There is one editable
+ * thing on the row and no room on a phone for a mode switch to announce it, so the label *is* the
+ * input, styled as text until you touch it. It commits on blur and on return, both of which are
+ * ways of saying "done" that iOS already teaches.
+ */
+function PasskeyRow({ passkey }: { passkey: PasskeyDto }) {
+  const theme = useTheme();
+  const rename = useRenamePasskey();
+  const remove = useDeletePasskey();
+
+  // Already resolved by the server — an unnamed credential arrives called after the authenticator
+  // it lives in. See `PasskeyDto`.
+  const label = passkey.label;
+  const [draft, setDraft] = useState(label);
+
+  // The field holds a draft, so it has to be told when the truth underneath it moves — a rename on
+  // the website, or a refetch on focus, would otherwise leave this row showing a name that is no
+  // longer anybody's. Adjusting during render rather than in an effect is React's own answer to
+  // this: it re-renders before painting, so the stale value is never on screen.
+  const [lastLabel, setLastLabel] = useState(label);
+  if (label !== lastLabel) {
+    setLastLabel(label);
+    setDraft(label);
+  }
+
+  function commit() {
+    const name = draft.trim();
+    // An empty field is not a way to clear the name — it is a slip. Put the label back.
+    if (!name || name === label) {
+      setDraft(label);
+      return;
+    }
+    // On failure the field goes back to what the server still believes. A row left showing a name
+    // that was never saved is worse than one that visibly did not change.
+    rename.mutate({ id: passkey.id, name }, { onError: () => setDraft(label) });
+  }
+
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowText}>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          editable={!rename.isPending}
+          maxLength={60}
+          returnKeyType="done"
+          selectTextOnFocus
+          accessibilityLabel={`Name of the ${label} passkey`}
+          style={[styles.name, { color: theme.text }]}
+        />
+        <Copy muted style={styles.subtitle}>
+          {passkey.deviceType === 'singleDevice'
+            ? 'This device only'
+            : 'Synced across your devices'}
+        </Copy>
+      </View>
+
+      {rename.isPending || remove.isPending ? (
+        <ActivityIndicator color={theme.textSecondary} />
+      ) : (
+        <Pressable
+          onPress={() => remove.mutate(passkey.id)}
+          accessibilityLabel={`Remove the ${label} passkey`}
+          hitSlop={Spacing.two}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+        >
+          <Text style={[styles.remove, { color: theme.destructive }]}>REMOVE</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   email: {
     fontSize: 14,
@@ -142,6 +232,38 @@ const styles = StyleSheet.create({
   error: {
     marginTop: Spacing.two,
     fontSize: 14,
+  },
+  list: {
+    marginTop: Spacing.three,
+  },
+  listSpinner: {
+    marginTop: Spacing.three,
+    alignSelf: 'flex-start',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  rowText: {
+    flex: 1,
+  },
+  // The input carries no border and no background: at rest it has to read as the row's title, not
+  // as a form control sitting in a list of them.
+  name: {
+    fontFamily: Fonts.serif,
+    fontSize: 16,
+    lineHeight: 24,
+    padding: 0,
+  },
+  subtitle: {
+    fontSize: 14,
+  },
+  remove: {
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.5,
   },
   button: {
     marginTop: Spacing.three,

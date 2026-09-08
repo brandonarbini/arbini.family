@@ -192,6 +192,15 @@ function nativeActions($fetch: BetterFetch, $store: { notify: (signal: string) =
       ) => {
         if (!native) return failed(new Error('This build has no passkey module.'));
 
+        // `name` is deliberately *not* in the query. Better Auth spends that one option twice:
+        // in the verify-registration body below it sets our own `passkeys.name`, but on this
+        // request it becomes WebAuthn's `user.name` — the account identifier the authenticator
+        // stores and shows as the username. Sending a device label here is how the credential
+        // ends up filed in iCloud Keychain under "iPhone 17 Pro" instead of under an email
+        // address. Omitted, the plugin falls back to the session's email, which is the right
+        // answer. Nothing passes a name today; keeping the two apart means nothing can start to
+        // by accident. The web has no equivalent seam — `passkeyClient()` builds this request
+        // itself — so `app/account/passkey-controls.tsx` simply passes no name at all.
         const options = await $fetch<PublicKeyCredentialCreationOptionsJSON>(
           '/passkey/generate-register-options',
           {
@@ -200,7 +209,6 @@ function nativeActions($fetch: BetterFetch, $store: { notify: (signal: string) =
               ...(opts?.authenticatorAttachment && {
                 authenticatorAttachment: opts.authenticatorAttachment,
               }),
-              ...(opts?.name && { name: opts.name }),
             },
             throw: false,
           },

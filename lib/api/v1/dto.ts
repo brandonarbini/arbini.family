@@ -248,3 +248,25 @@ export interface ReplyInputDto {
   /** Null clears the answer, which is not the same as answering no. */
   kind: ReplyKindDto | null;
 }
+
+// --- Passkeys ----------------------------------------------------------------
+
+/** Whether the credential can leave the device it was made on. */
+export type PasskeyDeviceTypeDto = "singleDevice" | "multiDevice";
+
+/**
+ * One passkey, already named.
+ *
+ * `label` rather than `name` + `aaguid`, and the difference is the point: an unnamed credential is
+ * called after the authenticator it lives in ("1Password", "iCloud Keychain"), and that mapping is
+ * a table that grows as new password managers ship. Resolving it on the server means a phone
+ * running last month's binary still names this month's authenticators, and that the website and
+ * the app can never disagree about what a row is called.
+ *
+ * No `createdAt`: nothing renders it, and a date on the wire is a promise about a format.
+ */
+export interface PasskeyDto {
+  id: string;
+  label: string;
+  deviceType: PasskeyDeviceTypeDto;
+}
