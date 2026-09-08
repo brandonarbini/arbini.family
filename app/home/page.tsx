@@ -3,7 +3,7 @@ import {
   AGENDA_WINDOW_DAYS,
   getBoardView,
   getPollsAwaiting,
-} from "@/app/home/data";
+} from "@/lib/board/view";
 import { PersonBadge } from "@/components/person-badge";
 import { RuledList, Section } from "@/components/ui/section";
 import { requireAuth } from "@/lib/auth-helpers";
