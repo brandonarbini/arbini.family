@@ -61,18 +61,10 @@ const serverSchema = z.object({
   POSTMARK_FROM_EMAIL: z.email().optional(),
 
   // --- Native app (passkeys) -------------------------------------------------
-  // The Apple Developer Team ID, used to build the apple-app-site-association document that
-  // authorises the iOS app to use passkeys scoped to this domain. Ten alphanumerics, e.g.
-  // "A1B2C3D4E5"; find it at developer.apple.com under Membership.
+  // The Apple Team ID is *not* here: it does not vary between environments, so it is a constant in
+  // lib/native-app.ts. These do vary — a debug key, an upload key and Play's re-signing key are
+  // different values, and which apply depends on how the build was made.
   //
-  // Optional, and the AASA route 404s without it. Serving that file with a wrong or placeholder
-  // team id is worse than not serving it: the platform caches what it fetches, so a bad document
-  // takes effect immediately and a corrected one does not.
-  APPLE_TEAM_ID: z
-    .string()
-    .regex(/^[A-Z0-9]{10}$/, "must be the 10-character Apple Team ID")
-    .optional(),
-
   // SHA-256 fingerprints of every Android signing certificate that will sign a build the family
   // installs — debug, upload, and Play's own re-signing key. Comma-separated, colon-delimited hex,
   // exactly as `eas credentials` and `keytool -list -v` print them. Omitting one means passkeys
