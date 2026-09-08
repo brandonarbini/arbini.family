@@ -14,7 +14,10 @@
         "tinted": "./assets/images/icon-tinted.png"
       },
       "bundleIdentifier": "family.arbini.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -50,6 +53,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e137c7b5-e058-4f16-9ce7-fe949948f861"
+      }
+    },
+    "owner": "brandonarbini"
   }
 }
