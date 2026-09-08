@@ -1,7 +1,7 @@
 # Arbini Family — mobile
 
-The Expo app for the family board. Currently a read-only board and stay list, rendering from
-fixtures in `src/constants/fixtures.ts`; the API it will read does not exist yet.
+The Expo app for the family board. Reads and writes the web app's `/api/v1/*` surface, shares its
+Better Auth session, and signs in with a magic link or a passkey.
 
 ## This app runs on the host
 
@@ -60,21 +60,32 @@ The value must match that server's origin **exactly** — Better Auth pins its `
 same value and checks `Origin` against it, so a trailing slash, or `127.0.0.1` for `localhost`,
 surfaces as an opaque auth rejection rather than a connection error.
 
-Production is not configured in any file here; a release build takes the value from its EAS build
-profile, so a shipped binary cannot carry a developer's localhost. A physical device is the one
-awkward case: it can't reach `localhost`, so it needs the Mac's LAN IP here _and_ `APP_URL` set to
-the same address in the repository root's `.env.local`, so the server's own origin agrees.
+Production is not in any `.env` file. The `preview` and `production` profiles in `eas.json` carry
+`EXPO_PUBLIC_API_URL=https://arbini.family`, so a shipped binary cannot pick up a developer's
+localhost by accident. `development` deliberately carries none and falls through to `.env.local`,
+because the right value there is per-worktree.
+
+A physical device is the one awkward case for _local_ work: it can't reach `localhost`, so it needs
+the Mac's LAN IP here _and_ `APP_URL` set to the same address in the repository root's `.env.local`,
+so the server's own origin agrees. Building against production sidesteps that entirely — see
+[Builds](#builds).
 
 ## Layout
 
 ```
 src/app/            Expo Router routes
-  _layout.tsx         root Stack — a Stack, not the tabs, so sign-in can live outside them
-  (tabs)/             Board and Where I am
+  _layout.tsx         root Stack + AuthGate — a Stack, not the tabs, so sign-in lives outside them
+  sign-in.tsx         magic link, plus a passkey button when the binary can offer one
+  auth.tsx            the arbinifamily:// deep-link landing, which writes the session cookie
+  (tabs)/             Board, Where I am, Polls, Account
+  stay/               new + [id], both presented as form sheets
 src/components/     Section / RuledList / Copy / DateStamp — the newspaper primitives
                     Page — masthead and paper ground, the native counterpart of app-shell.tsx
-src/constants/      theme.ts (tokens ported from the web's globals.css), fixtures.ts
+src/constants/      theme.ts — tokens ported from the web's globals.css
+src/lib/            api.ts + queries.ts (the /api/v1 client), auth-client.ts, env.ts
 src/hooks/          color scheme + theme
+assets/             wordmark.svg + mark.svg, and the PNGs generated from them
+scripts/            build-assets.mjs
 ```
 
 ## Design
@@ -101,29 +112,103 @@ loudly:
   `wordmark.tsx` kept in step with it. A mismatch shows up as a subtly squashed wordmark, not an
   error.
 
+### Icons and the splash
+
+Every PNG in `assets/images/` is generated, not drawn:
+
+```bash
+node scripts/build-assets.mjs     # needs ImageMagick: brew install imagemagick
+```
+
+It reads two vectors and writes nine rasters. `assets/wordmark.svg` becomes the splash;
+`assets/mark.svg` — the wordmark's initial `A`, the same path data lifted out — becomes the app
+icon, the Android adaptive layers and the web favicon. **Commit the PNGs**: Expo reads the rasters,
+so the vectors alone are not enough.
+
+Deriving them buys one thing worth the script. A colour is a token in one place rather than nine
+files that drift, and the icon is provably the same letterform as the masthead instead of an
+approximation of it.
+
+Two details that are choices rather than defaults:
+
+- `ios.icon` is the `{ light, dark, tinted }` triple, replacing the Expo template's `.icon` bundle
+  (an Icon Composer document, which needs Icon Composer to edit). Plain PNGs get the same iOS 26
+  appearance modes and stay editable from here.
+- The mark is inset to 62% of the icon square, and only 45% of the Android foreground — Android's
+  adaptive icon crops to a shape the launcher picks and clips anything outside the middle 66%. That
+  is a safe zone, not a margin.
+
 Standalone rules are drawn as a filled `View` with a `height`, never as a `borderTopWidth`. A
 border on a view with no intrinsic height silently fails to paint once the width goes sub-pixel,
 which is how the hairline half of the masthead's Scotch rule went missing the first time.
 
-## Passkeys and the Apple Developer account
-
-`ios.associatedDomains` is declared by `app.config.ts` **only when `EXPO_APPLE_TEAM_ID` is set**,
-and that gate is load-bearing rather than tidy.
-
-`com.apple.developer.associated-domains` is a capability, so Xcode refuses to build a target
-carrying it without a provisioning profile that grants it — which needs an Apple Developer account.
-That requirement ignores the destination: with the entitlement present, `npx expo run:ios` fails
-with `No code signing certificates are available to use` **even for a simulator build**, and the
-message reads as a broken toolchain rather than the missing account it actually is.
-
-Without an account, everything except passkeys works. The magic-link deep link travels over the
-`arbinifamily://` custom URL scheme, which is not a capability and needs no entitlement.
-
-When there is an account:
+## Builds
 
 ```bash
-EXPO_APPLE_TEAM_ID=XXXXXXXXXX npx expo prebuild --platform ios --clean
+pnpm ios          # debug build + Metro, on the Simulator
 ```
 
-and set `APPLE_TEAM_ID` on the server so `/.well-known/apple-app-site-association` stops returning 404. The domain in `app.config.ts` must equal `rpID` on the server — the hostname of
-`resolveBaseUrl()` — or the platform finds no credentials and says nothing.
+That is the loop for everything except passkeys, which the Simulator cannot do at all.
+
+### On a physical iPhone, against production
+
+The only way to test passkeys, and the only way to hand the app to someone.
+
+```bash
+EXPO_PUBLIC_API_URL=https://arbini.family \
+  npx expo run:ios --device --configuration Release
+```
+
+Both halves of that line are deliberate:
+
+- **`--configuration Release`** bundles the JavaScript into the binary. A debug build needs Metro
+  reachable on the same network to render anything, so it stops working the moment you walk away
+  from the Mac — which is most of what you want to try on a real phone.
+- **The variable inline**, rather than in `.env.local`. A real environment variable takes precedence
+  over `.env` files, so this points one build at production without leaving a production URL behind
+  to confuse the next `pnpm start` against the devcontainer.
+
+The phone needs Developer Mode on (Settings → Privacy & Security → Developer Mode; it reboots) and
+an Apple Developer account signed in under Xcode → Settings → Accounts.
+
+### EAS
+
+`eas.json` holds three profiles — `development`, `preview`, `production` — and is inert until the
+project is linked, since `app.json` carries no `extra.eas.projectId`:
+
+```bash
+npx eas-cli@latest init
+npx eas-cli@latest build --platform ios --profile preview
+```
+
+`eas-cli` is not a dependency on purpose; Expo's own guidance is to run it through `npx` so the
+version tracks the service rather than the lockfile.
+
+## Passkeys and the associated domain
+
+`app.config.ts` declares `webcredentials:arbini.family`, unconditionally. It was once gated behind
+an `EXPO_APPLE_TEAM_ID` variable so the app could be built with no Apple account; that gate is gone,
+because the variable lived in a gitignored file and a fresh clone would have quietly built an app
+with no associated domain and no passkeys.
+
+`com.apple.developer.associated-domains` is a capability, so Xcode will not build a target carrying
+it without a provisioning profile that grants it — and that requirement ignores the destination.
+Without a signing certificate, `npx expo run:ios` fails with `No code signing certificates are
+available to use` **even for a simulator build**, which reads as a broken toolchain rather than the
+missing account it is. Create one under Xcode → Settings → Accounts → Manage Certificates → + →
+Apple Development.
+
+The domain must equal `rpID` on the server — the hostname of `resolveBaseUrl()` — and it must serve
+`/.well-known/apple-app-site-association`, which `APPLE_TEAM_ID` on the server populates.
+
+**When this is wrong, nothing says so.** Apple's platform reports no error for an association it
+could not resolve; the passkey sheet simply never appears, or appears and finds nothing. Two things
+to check before the code, in order:
+
+```bash
+codesign -d --entitlements - /path/to/Arbini\ Family.app     # is the entitlement in the binary?
+curl https://app-site-association.cdn-apple.com/a/v1/arbini.family
+```
+
+The second is Apple's CDN copy, cached independently of your deploy — so it can lag a fix by a
+while, and a correct document on your own origin proves less than it looks like it does.

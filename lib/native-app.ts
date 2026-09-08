@@ -31,7 +31,7 @@ export const IOS_BUNDLE_IDENTIFIER = "family.arbini.app";
 export const ANDROID_PACKAGE_NAME = "family.arbini.app";
 
 /**
- * Must equal `expo.scheme` in mobile/app.json, and the authority of the `trustedOrigins` entry in
- * lib/auth.ts.
+ * Must equal `expo.scheme` in mobile/app.json and `APP_URL_SCHEME` in
+ * mobile/src/lib/auth-client.ts. lib/auth.ts builds the `trustedOrigins` entry from it.
  */
 export const APP_URL_SCHEME = "arbinifamily";
