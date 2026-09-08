@@ -60,6 +60,17 @@ const serverSchema = z.object({
   POSTMARK_API_TOKEN: z.string().min(1).optional(),
   POSTMARK_FROM_EMAIL: z.email().optional(),
 
+  // --- Native app (passkeys) -------------------------------------------------
+  // The Apple Team ID is *not* here: it does not vary between environments, so it is a constant in
+  // lib/native-app.ts. These do vary — a debug key, an upload key and Play's re-signing key are
+  // different values, and which apply depends on how the build was made.
+  //
+  // SHA-256 fingerprints of every Android signing certificate that will sign a build the family
+  // installs — debug, upload, and Play's own re-signing key. Comma-separated, colon-delimited hex,
+  // exactly as `eas credentials` and `keytool -list -v` print them. Omitting one means passkeys
+  // work on some builds and not others. The assetlinks route 404s when this is unset.
+  ANDROID_CERT_FINGERPRINTS: z.string().min(1).optional(),
+
   // --- Platform-injected (read-only; present depending on runtime) -----------
   // NOTE: `NEXT_RUNTIME` is intentionally NOT here — it must be read as the literal
   // `process.env.NEXT_RUNTIME` (see instrumentation.ts) so Next can statically tree-shake

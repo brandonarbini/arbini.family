@@ -270,6 +270,27 @@ export async function getStayOwnerProfileId(
   return stay?.profileId ?? null;
 }
 
+/**
+ * The poll an option belongs to, and whether it is still open.
+ *
+ * The counterpart of `getStayOwnerProfileId`, and uncached for the same reason: this is an
+ * authorization input. A cached answer would keep reporting a poll as open after it settled, and a
+ * late reply would then change a tally that stays and events were already written from.
+ *
+ * Narrow on purpose. The reply path needs to know two things, and loading the whole poll to learn
+ * them would invite passing the rest of it somewhere it does not belong — and would drag in the
+ * cached read this exists to avoid.
+ */
+export async function getPollForOption(
+  optionId: string,
+): Promise<{ pollId: string; status: PollStatus } | null> {
+  const option = await prisma.pollOption.findUnique({
+    where: { id: optionId },
+    select: { pollId: true, poll: { select: { status: true } } },
+  });
+  return option ? { pollId: option.pollId, status: option.poll.status } : null;
+}
+
 export interface BoardPollOption extends PollOptionWindow {
   replies: PollReplyRecord[];
 }

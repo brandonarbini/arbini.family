@@ -24,10 +24,13 @@ import {
 /**
  * The board, assembled.
  *
- * Route-private because this shape exists to be rendered by `/home` and nowhere else; the reads
- * it composes are the shared ones in `@/lib/board/data`.
+ * Promoted out of `app/home/data.ts` when it gained a second consumer: `/home` renders it, and
+ * `GET /api/v1/board` serialises it. That is the repository's own promotion rule — a route sidecar
+ * that stops being route-private moves to `/lib` — and it costs nothing here because both
+ * functions already took the actor as a plain argument.
  *
- * No auth here — `page.tsx` does that before calling in.
+ * No auth here, in either direction. `page.tsx` and the route handler each establish who is asking
+ * before calling in, which is what keeps this module composable.
  *
  * `today` is a required parameter rather than a default read from the clock. The reads underneath
  * are cached and keyed on their arguments, so a date resolved in here would be baked into the

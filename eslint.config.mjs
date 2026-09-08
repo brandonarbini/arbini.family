@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Expo app lints itself with eslint-config-expo, from its own install.
+    "mobile/**",
   ]),
   ...devEnvEslint, // dev-env:tool.env@1 — keep last so the rule cannot be overridden
 ]);

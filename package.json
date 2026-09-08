@@ -26,6 +26,7 @@
     "dev:magic-link": "cat .magic-link.local"
   },
   "dependencies": {
+    "@better-auth/expo": "1.7.2",
     "@better-auth/passkey": "1.7.2",
     "@hookform/resolvers": "^5.9.1",
     "@prisma/adapter-pg": "~7.9.1",

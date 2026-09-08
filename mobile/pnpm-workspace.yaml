@@ -1,0 +1,22 @@
+# Makes `mobile/` its own pnpm workspace root.
+#
+# Without this file, pnpm walks up the directory tree looking for a workspace root, finds the
+# repository's `pnpm-workspace.yaml`, and operates on the *web* install — even for a command run
+# from inside this directory. That is not a hypothetical: `expo lint`, finding no ESLint here,
+# shelled out to an install that re-resolved the whole repository for macOS and replaced the
+# devcontainer's Linux binaries with Mach-O ones.
+#
+# `--ignore-workspace` on every command looks like the alternative, and it is worse twice over: it
+# holds only for as long as every person and every tool remembers the flag — third-party tooling
+# never will — and it tells pnpm to ignore *this file*, `allowBuilds` included, so the install then
+# fails on an unapproved build script. An empty workspace root is a wall rather than a rule: pnpm
+# stops walking the moment it finds this file, and the configuration below still applies.
+packages: []
+
+# Build-script decisions, mirroring the repository root's. `unrs-resolver` is the native resolver
+# behind eslint-plugin-import; the root declines to build it and lints fine, so this does too.
+# Declaring them is also what keeps `pnpm install` from exiting non-zero on an unapproved build,
+# which matters because `expo lint` runs an install as its dependency check.
+allowBuilds:
+  unrs-resolver: false
+  esbuild: true

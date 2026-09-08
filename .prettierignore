@@ -5,3 +5,6 @@ pnpm-lock.yaml
 
 # prisma generated client
 /generated
+
+# the Expo app formats itself from its own install
+/mobile
