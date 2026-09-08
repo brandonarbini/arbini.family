@@ -23,3 +23,7 @@ import { BOARD_TAGS } from "@/lib/board/cache";
 export function invalidateStays(): void {
   revalidateTag(BOARD_TAGS.stays, { expire: 0 });
 }
+
+export function invalidatePolls(): void {
+  revalidateTag(BOARD_TAGS.polls, { expire: 0 });
+}

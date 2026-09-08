@@ -8,11 +8,19 @@ import type {
   GatheringDto,
   MeDto,
   PlaceDto,
+  PollDto,
+  PollOptionDto,
   PresenceDto,
   StayDto,
   WhereDto,
 } from "@/lib/api/v1/dto";
-import type { BoardPoll, BoardStay, Place } from "@/lib/board/data";
+import type {
+  BoardPoll,
+  BoardStay,
+  FamilyMember,
+  Place,
+} from "@/lib/board/data";
+import { tallyPoll } from "@/lib/polls/tally";
 import type { EditorData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
@@ -189,5 +197,66 @@ function toStayDto(stay: BoardStay, place: Place): StayDto {
     startsOn: stay.startsOn,
     endsOn: stay.endsOn,
     note: stay.note,
+  };
+}
+
+// --- Polls -------------------------------------------------------------------
+
+/**
+ * A poll, tallied and resolved to names.
+ *
+ * `viewerProfileId` decides two things the client should not have to work out: which answer is
+ * "mine" on each option, and whether anything is still waiting on this person.
+ */
+export function toPollDto(
+  poll: BoardPoll,
+  members: FamilyMember[],
+  viewerProfileId: string,
+  viewerUserId: string,
+): PollDto {
+  const nameByProfileId = new Map(
+    members.map((member) => [member.profileId, member.name]),
+  );
+  const profileIds = members.map((member) => member.profileId);
+  const replies = poll.options.flatMap((option) => option.replies);
+  const tallies = tallyPoll(poll.options, replies, profileIds);
+
+  const names = (ids: string[]) =>
+    ids.map((id) => nameByProfileId.get(id) ?? "Someone");
+
+  const options: PollOptionDto[] = tallies.map((tally) => {
+    const window = poll.options.find(
+      (option) => option.optionId === tally.optionId,
+    );
+    const mine = window?.replies.find(
+      (reply) => reply.profileId === viewerProfileId,
+    );
+
+    return {
+      id: tally.optionId,
+      startsOn: window?.startsOn ?? "",
+      endsOn: window?.endsOn ?? "",
+      yesNames: names(tally.yesBy),
+      maybeNames: names(tally.maybeBy),
+      noNames: names(tally.noBy),
+      silentNames: names(tally.silentBy),
+      everyoneCanMake: tally.everyoneCanMake,
+      myReply: mine?.kind ?? null,
+      isSettled: poll.settledOptionId === tally.optionId,
+    };
+  });
+
+  return {
+    id: poll.id,
+    title: poll.title,
+    status: poll.status,
+    placeName: poll.placeName,
+    // Null when the viewer asked it — being told "Brandon is waiting on you" when you are Brandon
+    // reads as a bug, so the decision is made here rather than left to each client to remember.
+    askedByName: poll.createdById === viewerUserId ? null : poll.createdByName,
+    awaitingYou:
+      poll.status === "OPEN" &&
+      tallies.some((tally) => tally.silentBy.includes(viewerProfileId)),
+    options,
   };
 }

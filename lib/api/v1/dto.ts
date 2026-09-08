@@ -196,3 +196,55 @@ export interface StayInputDto {
   endsOn: CalendarDateString | null;
   note: string | null;
 }
+
+// --- Polls -------------------------------------------------------------------
+
+export type PollStatusDto = "OPEN" | "SETTLED";
+
+/** Mirrors the `ReplyKind` enum in schema.prisma. */
+export type ReplyKindDto = "YES" | "MAYBE" | "NO";
+
+/**
+ * One date option on a poll, already tallied.
+ *
+ * Names rather than profile ids, for the same reason the agenda resolves its own: the server holds
+ * the roster, and shipping it so every client can perform the same join is work done twice to
+ * reach one answer.
+ *
+ * `silentNames` is who has not answered *this* option. Deliberately not folded into `no` — silence
+ * is not a refusal, and a tally that treated it as one would settle dates nobody agreed to.
+ */
+export interface PollOptionDto {
+  id: string;
+  startsOn: CalendarDateString;
+  endsOn: CalendarDateString;
+  yesNames: string[];
+  maybeNames: string[];
+  noNames: string[];
+  silentNames: string[];
+  /** Every single person said yes — not merely that nobody said no. */
+  everyoneCanMake: boolean;
+  /** The viewer's own answer to this option, or null if they have not given one. */
+  myReply: ReplyKindDto | null;
+  /** True when the poll settled on this option. */
+  isSettled: boolean;
+}
+
+export interface PollDto {
+  id: string;
+  title: string;
+  status: PollStatusDto;
+  /** Where the gathering is. Null means home, resolved when the poll settles. */
+  placeName: string | null;
+  /** Who asked, or null when that is the viewer themselves — see `AwaitingPollDto`. */
+  askedByName: string | null;
+  /** True while any option is still waiting on the viewer. */
+  awaitingYou: boolean;
+  options: PollOptionDto[];
+}
+
+/** The body of `PUT /api/v1/polls/:pollId/options/:optionId/reply`. */
+export interface ReplyInputDto {
+  /** Null clears the answer, which is not the same as answering no. */
+  kind: ReplyKindDto | null;
+}

@@ -1,4 +1,11 @@
-import type { BoardDto, MeDto, StayInputDto, WhereDto } from '@server/api/v1/dto';
+import type {
+  BoardDto,
+  MeDto,
+  PollDto,
+  ReplyInputDto,
+  StayInputDto,
+  WhereDto,
+} from '@server/api/v1/dto';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiSend } from '@/lib/api';
@@ -15,6 +22,7 @@ export const queryKeys = {
   me: ['me'] as const,
   board: ['board'] as const,
   where: ['where'] as const,
+  polls: ['polls'] as const,
 };
 
 export function useBoard() {
@@ -28,6 +36,45 @@ export function useWhere() {
   return useQuery({
     queryKey: queryKeys.where,
     queryFn: ({ signal }) => apiGet<WhereDto>('/api/v1/where', signal),
+  });
+}
+
+export function usePolls() {
+  return useQuery({
+    queryKey: queryKeys.polls,
+    queryFn: ({ signal }) => apiGet<PollDto[]>('/api/v1/polls', signal),
+  });
+}
+
+/**
+ * Answer one option.
+ *
+ * No `profileId` — the server takes it from the session, because only you may answer for you.
+ * That is stricter than the stay editor, where a parent may act for a kid, and the difference is
+ * deliberate: a poll answer is a statement of intent in somebody's own voice.
+ */
+export function useAnswerPoll() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      pollId,
+      optionId,
+      kind,
+    }: {
+      pollId: string;
+      optionId: string;
+      kind: ReplyInputDto['kind'];
+    }) =>
+      apiSend<void>('PUT', `/api/v1/polls/${pollId}/options/${optionId}/reply`, {
+        kind,
+      } satisfies ReplyInputDto),
+    // The board carries "your turn", so an answer changes it as surely as it changes the ballot.
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.polls }),
+        client.invalidateQueries({ queryKey: queryKeys.board }),
+      ]),
   });
 }
 
