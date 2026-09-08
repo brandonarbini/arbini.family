@@ -4,12 +4,16 @@ import type {
   AgendaEntryDto,
   AwaitingPollDto,
   BoardDto,
+  CalendarDateString,
   GatheringDto,
   MeDto,
   PlaceDto,
   PresenceDto,
+  StayDto,
+  WhereDto,
 } from "@/lib/api/v1/dto";
-import type { BoardPoll, Place } from "@/lib/board/data";
+import type { BoardPoll, BoardStay, Place } from "@/lib/board/data";
+import type { EditorData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
 import { AGENDA_WINDOW_DAYS } from "@/lib/board/view";
@@ -143,5 +147,47 @@ export function toBoardDto(
     presence: view.presence.map(toPresenceDto),
     agenda: toAgendaDto(view.agenda, view.membersByProfileId, view.placesById),
     agendaWindowDays: AGENDA_WINDOW_DAYS,
+  };
+}
+
+// --- Stays -------------------------------------------------------------------
+
+/**
+ * The stay editor's data.
+ *
+ * `lists` carries only the people the viewer may edit — `getEditorData` has already narrowed that
+ * from the actor's role. The client does not filter: a row it cannot change is a row it should
+ * never have been shown, and deciding that here means one answer rather than one per client.
+ */
+export function toWhereDto(
+  today: CalendarDateString,
+  data: EditorData,
+): WhereDto {
+  const placesById = new Map(data.places.map((place) => [place.id, place]));
+
+  return {
+    today,
+    places: data.places.map(toPlaceDto),
+    lists: data.stayLists.map((list) => ({
+      profileId: list.member.profileId,
+      name: list.member.name,
+      stays: list.stays.flatMap((stay) => {
+        const place = placesById.get(stay.placeId);
+        // A stay whose place has been deleted cannot be rendered or safely edited, and sending it
+        // with a null place would push that decision onto every client.
+        return place ? [toStayDto(stay, place)] : [];
+      }),
+    })),
+  };
+}
+
+function toStayDto(stay: BoardStay, place: Place): StayDto {
+  return {
+    id: stay.id,
+    profileId: stay.profileId,
+    place: toPlaceDto(place),
+    startsOn: stay.startsOn,
+    endsOn: stay.endsOn,
+    note: stay.note,
   };
 }

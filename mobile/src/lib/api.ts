@@ -38,6 +38,24 @@ export class NetworkError extends Error {
 }
 
 export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return request<T>('GET', path, undefined, signal);
+}
+
+/** POST / PATCH / DELETE. Returns `undefined` for a 204. */
+export async function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  return request<T>(method, path, body);
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   // Better Auth's own client attaches credentials to its `$fetch` calls, but a plain fetch has no
   // cookie jar doing it invisibly — React Native has no cookie jar at all. `getCookie()` reads
   // what expoClient stored in the keychain.
@@ -46,11 +64,13 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   let response: Response;
   try {
     response = await fetch(`${env.apiUrl}${path}`, {
-      method: 'GET',
+      method,
       headers: {
         Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(cookie ? { Cookie: cookie } : {}),
       },
+      body: body === undefined ? undefined : JSON.stringify(body),
       // Nothing to send credentials *from* — being explicit stops a future reader assuming the
       // browser semantics apply here.
       credentials: 'omit',
@@ -64,6 +84,8 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     throw new ApiError(response.status, await readErrorBody(response));
   }
 
+  // 204 has no body, and calling .json() on it throws.
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 

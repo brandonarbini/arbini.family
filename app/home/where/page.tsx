@@ -1,4 +1,4 @@
-import { getEditorData } from "@/app/home/where/data";
+import { getEditorData } from "@/lib/board/editor";
 import { DeleteStayButton } from "@/app/home/where/delete-stay-button";
 import { StayForm } from "@/app/home/where/stay-form";
 import { PersonBadge } from "@/components/person-badge";

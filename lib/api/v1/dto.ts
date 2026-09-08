@@ -154,3 +154,45 @@ export interface ApiErrorBody {
     fieldErrors?: Record<string, string[]>;
   };
 }
+
+// --- Stays -------------------------------------------------------------------
+
+/** One recorded stay: a person at a place, over a range of days. */
+export interface StayDto {
+  id: string;
+  profileId: string;
+  place: PlaceDto;
+  startsOn: CalendarDateString;
+  /** The last day *at* the place. Null means open-ended — "from then on". */
+  endsOn: CalendarDateString | null;
+  note: string | null;
+}
+
+/** One person's stays, as the editor lists them. */
+export interface StayListDto {
+  profileId: string;
+  name: string;
+  stays: StayDto[];
+}
+
+/**
+ * Everything the "Where I am" screen needs.
+ *
+ * `lists` holds only the people the viewer may edit — themselves, or everyone if they are a
+ * parent — because the screen exists to change things, and listing rows that would be refused is
+ * an invitation to be refused. The server decides this; the client does not filter.
+ */
+export interface WhereDto {
+  today: CalendarDateString;
+  places: PlaceDto[];
+  lists: StayListDto[];
+}
+
+/** The body of `POST /api/v1/stays` and `PATCH /api/v1/stays/:id`. */
+export interface StayInputDto {
+  profileId: string;
+  placeId: string;
+  startsOn: CalendarDateString;
+  endsOn: CalendarDateString | null;
+  note: string | null;
+}

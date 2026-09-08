@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { isCalendarDate } from "@/lib/dates";
+import {
+  calendarDateSchema,
+  noteSchema,
+  isValidStayRange,
+  stayRangeRefinement,
+} from "@/lib/board/stay-input";
 
 /**
  * Input schemas for the stay editor.
@@ -8,11 +13,13 @@ import { isCalendarDate } from "@/lib/dates";
  * exactly the schema the form was built from. Two copies of these rules would be free to
  * disagree, and the disagreement would surface as a form that accepts something the server then
  * rejects with no field to attach the error to.
+ *
+ * This file owns only the *`FormData` shaping*: an untouched date input arrives as `""` and means
+ * open-ended, not invalid. The rules themselves live in `lib/board/stay-input.ts`, shared with the
+ * JSON schema the app posts against.
  */
 
-const calendarDate = z
-  .string()
-  .refine(isCalendarDate, "Use a real date (YYYY-MM-DD)");
+const calendarDate = calendarDateSchema;
 
 /**
  * `endsOn` arrives as `""` from an untouched date input, which means "open-ended" rather than
@@ -26,7 +33,7 @@ const optionalCalendarDate = z.preprocess(
 
 const optionalNote = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? null : value),
-  z.string().max(200, "Keep it under 200 characters").nullable(),
+  noteSchema,
 );
 
 export const stayFormSchema = z
@@ -42,11 +49,9 @@ export const stayFormSchema = z
     endsOn: optionalCalendarDate,
     note: optionalNote,
   })
-  .refine((data) => data.endsOn === null || data.endsOn >= data.startsOn, {
-    path: ["endsOn"],
-    // `endsOn` is the last day *at* the place, so equal dates are a legitimate one-night stay and
-    // the comparison is `>=` rather than `>`.
-    message: "The last day can't be before the first day",
+  .refine(isValidStayRange, {
+    path: [...stayRangeRefinement.path],
+    message: stayRangeRefinement.message,
   });
 
 export type StayFormInput = z.infer<typeof stayFormSchema>;
