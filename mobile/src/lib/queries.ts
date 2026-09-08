@@ -1,6 +1,7 @@
 import type {
   BoardDto,
   MeDto,
+  PasskeyDto,
   PollDto,
   ReplyInputDto,
   StayInputDto,
@@ -9,6 +10,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiSend } from '@/lib/api';
+import { authClient } from '@/lib/auth-client';
 
 /**
  * Query keys, in one place.
@@ -23,6 +25,13 @@ export const queryKeys = {
   board: ['board'] as const,
   where: ['where'] as const,
   polls: ['polls'] as const,
+  /**
+   * Scoped to the account, unlike every key above it. The board is the same board for everyone in
+   * the family, but a passkey list is one person's — and the cache outlives a sign-out, so an
+   * unscoped key would show the previous account's credentials to whoever signs in next on the
+   * same phone. Null while the session is still resolving; nothing fetches against that.
+   */
+  passkeys: (userId: string | null) => ['passkeys', userId] as const,
 };
 
 export function useBoard() {
@@ -125,4 +134,78 @@ function invalidateStays(client: ReturnType<typeof useQueryClient>) {
     client.invalidateQueries({ queryKey: queryKeys.where }),
     client.invalidateQueries({ queryKey: queryKeys.board }),
   ]);
+}
+
+/**
+ * Passkeys.
+ *
+ * The list comes from `/api/v1/passkeys` like everything else here, and arrives already named —
+ * see `PasskeyDto`. That is the whole reason this endpoint exists rather than the app calling
+ * Better Auth's `list-user-passkeys` directly: naming an unnamed credential means mapping its
+ * AAGUID to "1Password" or "iCloud Keychain", and a table that ships inside a binary is a table
+ * that goes stale on every phone that has not updated.
+ *
+ * The two writes do go straight to Better Auth, which already checks that the row belongs to the
+ * caller. There is no v1 route for them and nothing this app would gain from one.
+ */
+
+/** The session-scoped cache key, and whether there is a session to scope it to. */
+function usePasskeyScope() {
+  const { data: session } = authClient.useSession();
+  const userId = session?.user?.id ?? null;
+
+  return { userId, queryKey: queryKeys.passkeys(userId) };
+}
+
+export function usePasskeys() {
+  const { userId, queryKey } = usePasskeyScope();
+
+  return useQuery({
+    queryKey,
+    queryFn: ({ signal }) => apiGet<PasskeyDto[]>('/api/v1/passkeys', signal),
+    // Nothing to ask for until we know whose passkeys to ask about. Without this the first render
+    // after a cold start fetches against a null key and caches the answer under it.
+    enabled: userId !== null,
+  });
+}
+
+/**
+ * Refetch the list after a registration.
+ *
+ * Adding a passkey happens in `lib/passkey-client.ts`, which calls Better Auth's `$fetch` directly
+ * rather than through the client's path proxy — so the plugin's own cache signals never fire, and
+ * the one action most likely to change the list is the one that would leave it stale.
+ */
+export function useInvalidatePasskeys() {
+  const client = useQueryClient();
+  const { queryKey } = usePasskeyScope();
+
+  return () => client.invalidateQueries({ queryKey });
+}
+
+export function useRenamePasskey() {
+  const client = useQueryClient();
+  const { queryKey } = usePasskeyScope();
+
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await authClient.passkey.updatePasskey({ id, name });
+      // Better Auth resolves its failures rather than throwing them; React Query needs the opposite.
+      if (error) throw new Error(error.message ?? 'Could not rename that passkey.');
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey }),
+  });
+}
+
+export function useDeletePasskey() {
+  const client = useQueryClient();
+  const { queryKey } = usePasskeyScope();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await authClient.passkey.deletePasskey({ id });
+      if (error) throw new Error(error.message ?? 'Could not remove that passkey.');
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey }),
+  });
 }

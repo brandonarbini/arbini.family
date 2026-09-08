@@ -1,10 +1,7 @@
-import { getPasskeys } from "@/app/account/data";
-import {
-  AddPasskeyButton,
-  RemovePasskeyButton,
-} from "@/app/account/passkey-controls";
+import { AddPasskeyButton, PasskeyRow } from "@/app/account/passkey-controls";
 import { RuledList, Section } from "@/components/ui/section";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getPasskeys } from "@/lib/passkeys/data";
 
 export const metadata = { title: "Account — Arbini Family" };
 
@@ -31,23 +28,8 @@ export default async function AccountPage() {
           {passkeys.length > 0 ? (
             <RuledList>
               {passkeys.map((passkey) => (
-                <li
-                  key={passkey.id}
-                  className="flex items-center gap-3 py-3 first:pt-0"
-                >
-                  <div>
-                    <p className="font-copy text-base font-semibold">
-                      {passkey.name ?? "Passkey"}
-                    </p>
-                    <p className="font-copy text-base text-muted-foreground">
-                      {passkey.deviceType === "singleDevice"
-                        ? "This device only"
-                        : "Synced across your devices"}
-                    </p>
-                  </div>
-                  <div className="ml-auto">
-                    <RemovePasskeyButton passkeyId={passkey.id} />
-                  </div>
+                <li key={passkey.id} className="py-3 first:pt-0">
+                  <PasskeyRow passkey={passkey} />
                 </li>
               ))}
             </RuledList>

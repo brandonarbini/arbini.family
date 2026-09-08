@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import {
   type ActionResult,
   deletePasskeySchema,
+  renamePasskeySchema,
 } from "@/app/account/validations";
 import { requireAuth } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,45 @@ export async function removePasskey(
   // and the passkey just deleted stays in the list — a delete that worked reads as one that failed.
   // `refresh` rather than `updateTag`: `getPasskeys` in ./data.ts is deliberately uncached, so there
   // is no tag to invalidate, and `refresh` revalidates exactly that dynamic read.
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * Rename a passkey.
+ *
+ * This is the only thing that ever writes `name`. Registration deliberately leaves it null — see
+ * the note in ./passkey-controls.tsx — so an unnamed row names its authenticator instead, and this
+ * is how you say something better than "1Password" when you have two of them.
+ *
+ * Ownership is folded into the filter for the same reason as `removePasskey` above.
+ */
+export async function renamePasskey(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await requireAuth("/account");
+
+  const parsed = renamePasskeySchema.safeParse({
+    passkeyId: formData.get("passkeyId") ?? undefined,
+    name: formData.get("name") ?? undefined,
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      formError: "Give it a name, up to 60 characters.",
+    };
+  }
+
+  const { count } = await prisma.passkey.updateMany({
+    where: { id: parsed.data.passkeyId, userId: user.id },
+    data: { name: parsed.data.name },
+  });
+
+  if (count === 0) {
+    return { ok: false, formError: "That passkey no longer exists." };
+  }
+
   refresh();
   return { ok: true };
 }
