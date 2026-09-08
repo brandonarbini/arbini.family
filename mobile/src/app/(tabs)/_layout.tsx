@@ -4,8 +4,8 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /**
- * Two tabs, matching the two things the web app's nav puts first: the board, and the one screen
- * where you change something about yourself. Polls and Account arrive with their API surfaces.
+ * Four tabs, in the order the web app's nav puts them: the board, where everyone is, the open
+ * questions, and the one screen where you change something about yourself.
  *
  * The colours are monochrome on purpose. iOS tints tab bars with the system blue unless told
  * otherwise, and `labelStyle` alone does not override the icon — that is why the first build had
