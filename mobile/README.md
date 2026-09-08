@@ -104,3 +104,26 @@ loudly:
 Standalone rules are drawn as a filled `View` with a `height`, never as a `borderTopWidth`. A
 border on a view with no intrinsic height silently fails to paint once the width goes sub-pixel,
 which is how the hairline half of the masthead's Scotch rule went missing the first time.
+
+## Passkeys and the Apple Developer account
+
+`ios.associatedDomains` is declared by `app.config.ts` **only when `EXPO_APPLE_TEAM_ID` is set**,
+and that gate is load-bearing rather than tidy.
+
+`com.apple.developer.associated-domains` is a capability, so Xcode refuses to build a target
+carrying it without a provisioning profile that grants it — which needs an Apple Developer account.
+That requirement ignores the destination: with the entitlement present, `npx expo run:ios` fails
+with `No code signing certificates are available to use` **even for a simulator build**, and the
+message reads as a broken toolchain rather than the missing account it actually is.
+
+Without an account, everything except passkeys works. The magic-link deep link travels over the
+`arbinifamily://` custom URL scheme, which is not a capability and needs no entitlement.
+
+When there is an account:
+
+```bash
+EXPO_APPLE_TEAM_ID=XXXXXXXXXX npx expo prebuild --platform ios --clean
+```
+
+and set `APPLE_TEAM_ID` on the server so `/.well-known/apple-app-site-association` stops returning 404. The domain in `app.config.ts` must equal `rpID` on the server — the hostname of
+`resolveBaseUrl()` — or the platform finds no credentials and says nothing.
