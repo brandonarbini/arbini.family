@@ -1,10 +1,10 @@
 import { expoClient } from '@better-auth/expo/client';
-import { passkeyClient } from '@better-auth/passkey/client';
 import { magicLinkClient } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/react';
 import * as SecureStore from 'expo-secure-store';
 
 import { env } from '@/lib/env';
+import { expoPasskeyClient } from '@/lib/passkey-client';
 
 /**
  * The single seam between this app and Better Auth, mirroring the web's `lib/auth-client.ts`.
@@ -25,41 +25,10 @@ import { env } from '@/lib/env';
  */
 
 /**
- * The passkey plugin, loaded only if its native module is actually present.
- *
- * `@lobehub/expo-better-auth-passkey` throws `Cannot find native module` at *import* time when the
- * binary does not contain it — which is every Expo Go session, and any build made before the
- * dependency was added. A static import therefore does not degrade the passkey button; it stops
- * the app booting at all, before a single screen renders.
- *
- * So it is required lazily and the failure is caught. Where the module is missing the app falls
- * back to `passkeyClient()`, better-auth's web client: its shape keeps `authClient.signIn.passkey`
- * typed and callable, and calling it fails cleanly (there is no `navigator.credentials` in React
- * Native) rather than taking the process with it. `passkeysSupported` below is what the UI should
- * consult so it can decline to offer something that cannot work.
+ * Whether this build can offer passkeys, re-exported so screens have one import for the client and
+ * the question they have to ask before showing a button.
  */
-function loadPasskeyPlugin(): { plugin: ReturnType<typeof passkeyClient>; supported: boolean } {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@lobehub/expo-better-auth-passkey') as {
-      expoPasskeyClient: () => ReturnType<typeof passkeyClient>;
-    };
-    return { plugin: mod.expoPasskeyClient(), supported: true };
-  } catch {
-    return { plugin: passkeyClient(), supported: false };
-  }
-}
-
-const passkey = loadPasskeyPlugin();
-
-/**
- * Whether this build can actually use passkeys.
- *
- * False in Expo Go. Also false in any build predating the native module, which is the case worth
- * remembering: it is a property of the *binary*, not of the code, so it cannot be inferred from
- * the source in front of you.
- */
-export const passkeysSupported = passkey.supported;
+export { passkeysSupported } from '@/lib/passkey-client';
 
 /**
  * The keychain namespace for everything auth-related. Exported because `app/auth.tsx` has to write
@@ -75,18 +44,19 @@ export const authClient = createAuthClient({
   plugins: [
     magicLinkClient(),
     /**
-     * Passkeys, through the platform credential APIs rather than WebAuthn.
+     * Passkeys, through the platform credential APIs rather than WebAuthn. Ours — see
+     * lib/passkey-client.ts for what it replaced and why.
      *
-     * The native plugin is a drop-in for the web's `passkeyClient()` — same `signIn.passkey()` and
-     * `passkey.addPasskey()` surface — that swaps `navigator.credentials`, which React Native does
-     * not have, for `ASAuthorizationController` on iOS and Credential Manager on Android. The
-     * *server* needs no change at all: `passkey()` in lib/auth.ts speaks the WebAuthn protocol,
-     * and only the thing producing the attestation differs.
+     * Same `signIn.passkey()` and `passkey.addPasskey()` surface as the web's `passkeyClient()`,
+     * swapping `navigator.credentials` for `ASAuthorizationController` on iOS. The *server* needs
+     * no change at all: `passkey()` in lib/auth.ts speaks the WebAuthn protocol, and only the
+     * thing producing the attestation differs.
      *
      * Because `rpID` is the hostname of the canonical origin, a passkey registered in the browser
-     * at arbini.family is the same credential this app offers. One registration, not two.
+     * at arbini.family is the same credential this app offers — one credential, two surfaces, and
+     * no need to register again here if you already have one from the website.
      */
-    passkey.plugin,
+    expoPasskeyClient(),
     expoClient({
       scheme: APP_URL_SCHEME,
       storagePrefix: AUTH_STORAGE_PREFIX,

@@ -1,7 +1,7 @@
 import { getSetCookie } from '@better-auth/expo/client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -37,8 +37,6 @@ const COOKIE_STORAGE_KEY = `${AUTH_STORAGE_PREFIX}_cookie`;
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const { cookie } = useLocalSearchParams<{ cookie?: string }>();
-  const { data: session, isPending } = authClient.useSession();
-  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,24 +51,49 @@ export default function AuthCallbackScreen() {
       }
       if (cancelled) return;
 
-      // Better-auth's own "ask again" signal. `useSession()` fired its request when this screen
-      // mounted — before the cookie existed — so without this it would sit on a null answer it
-      // has no reason to revisit.
+      // Better-auth's own "ask again" signal, and it must come first. `useSession()` elsewhere in
+      // the app fired its request before this cookie existed, so without this it would sit on a
+      // null answer it has no reason to revisit — including in the gate in _layout.tsx, which
+      // would then bounce us straight back out of the app we are about to enter.
       authClient.$store.notify('$sessionSignal');
-      setSettled(true);
+
+      // Then ask directly, and wait for the answer.
+      //
+      // This screen used to read `useSession()` and navigate once `isPending` went false. That
+      // looks equivalent and is not: `notify` does not set `isPending` synchronously — the atom
+      // defers its fetch through `Promise.resolve().then(...)` — so for one render the hook still
+      // held the *previous* answer, from the request made before the cookie existed. Not pending,
+      // and null. The screen read that as "the link did not work" and redirected to sign-in
+      // roughly 200ms before the real answer arrived. It was invisible against a local server,
+      // where the first request resolves in about a millisecond, and reproducible every time
+      // against production.
+      //
+      // Awaiting the request removes the guesswork: the branch below runs on an answer that
+      // postdates the cookie, by construction rather than by timing. The `notify` above is given
+      // the length of this round trip to settle every other subscriber, which is why it goes first.
+      const { data: session } = await authClient.getSession();
+      if (cancelled) return;
+
+      if (session) {
+        router.replace('/');
+        return;
+      }
+
+      // Two different failures, and the difference is worth carrying. A link with no `cookie` on
+      // it is one the server declined to honour — expired, or already used, which is what a link
+      // tapped twice looks like; verified against production, where a spent token still redirects
+      // here but with no `Set-Cookie` to pass along. A link that carried one and still left us
+      // signed out is something else, and saying "expired" would be a guess dressed as an answer.
+      router.replace({
+        pathname: '/sign-in',
+        params: { reason: cookie ? 'failed' : 'expired' },
+      });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [cookie]);
-
-  useEffect(() => {
-    if (!settled || isPending) return;
-    // No session means the link was expired, already used, or tampered with. There is nothing to
-    // say about the difference that the sign-in screen does not say better.
-    router.replace(session ? '/' : '/sign-in');
-  }, [settled, isPending, session, router]);
+  }, [cookie, router]);
 
   const colors = Colors[useColorScheme() === 'dark' ? 'dark' : 'light'];
 

@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput } from 'react-native';
 
@@ -23,8 +24,21 @@ type Status = 'idle' | 'sending' | 'sent' | 'passkey' | 'error';
  * but will fail. That is deliberate: hiding it in Expo Go would mean the screen you develop
  * against is not the screen you ship.
  */
+/**
+ * Why a link that did not work says so.
+ *
+ * /auth redirects here with a `reason` when it could not complete a sign-in, because the screen
+ * it lands you on is otherwise indistinguishable from never having tapped the link at all — which
+ * is exactly how an expired link presented itself the first time one was tapped twice.
+ */
+const REASONS: Record<string, string> = {
+  expired: 'That link had already been used, or it expired. Ask for a new one.',
+  failed: 'That link did not sign you in. Try a new one.',
+};
+
 export default function SignInScreen() {
   const theme = useTheme();
+  const { reason } = useLocalSearchParams<{ reason?: string }>();
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +105,9 @@ export default function SignInScreen() {
   }
 
   const busy = status === 'sending' || status === 'passkey';
+  // A failure from this screen outranks one carried in from a link: it is the more recent answer
+  // to the more recent question.
+  const message = error ?? (reason ? (REASONS[reason] ?? null) : null);
 
   return (
     <Page dateline="Sign in">
@@ -113,7 +130,9 @@ export default function SignInScreen() {
           style={[styles.input, { color: theme.text, borderColor: theme.border }]}
         />
 
-        {error ? <Copy style={[styles.error, { color: theme.destructive }]}>{error}</Copy> : null}
+        {message ? (
+          <Copy style={[styles.error, { color: theme.destructive }]}>{message}</Copy>
+        ) : null}
 
         <Pressable
           onPress={requestMagicLink}
