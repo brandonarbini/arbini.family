@@ -57,17 +57,24 @@ function AuthGate() {
   const router = useRouter();
   const colors = Colors[useColorScheme() === 'dark' ? 'dark' : 'light'];
 
+  // Both screens are reachable without a session, and for the same reason: /auth is where the
+  // emailed link lands, arrived at in the instant *before* the session exists. Redirecting away
+  // from it would cancel the sign-in it is in the middle of completing.
   const onSignIn = segments[0] === 'sign-in';
+  const onAuthCallback = segments[0] === 'auth';
+  const outsideTheApp = onSignIn || onAuthCallback;
 
   useEffect(() => {
     if (isPending) return;
 
-    if (!session && !onSignIn) {
+    if (!session && !outsideTheApp) {
       router.replace('/sign-in');
     } else if (session && onSignIn) {
+      // Deliberately `onSignIn`, not `outsideTheApp`: /auth performs its own redirect once the
+      // session lands, and racing it from here would mean two navigations for one arrival.
       router.replace('/');
     }
-  }, [isPending, session, onSignIn, router]);
+  }, [isPending, session, outsideTheApp, onSignIn, router]);
 
   useEffect(() => {
     // Held until the session has been read, so the first frame the family sees is the board or
@@ -94,6 +101,7 @@ function AuthGate() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+      <Stack.Screen name="auth" options={{ animation: 'none' }} />
     </Stack>
   );
 }

@@ -61,6 +61,15 @@ const passkey = loadPasskeyPlugin();
  */
 export const passkeysSupported = passkey.supported;
 
+/**
+ * The keychain namespace for everything auth-related. Exported because `app/auth.tsx` has to write
+ * the session cookie under the same prefix the plugin reads from — see the note there.
+ */
+export const AUTH_STORAGE_PREFIX = 'arbinifamily';
+
+/** Must equal `expo.scheme` in app.json and the `trustedOrigins` entry in lib/auth.ts. */
+export const APP_URL_SCHEME = 'arbinifamily';
+
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   plugins: [
@@ -79,8 +88,8 @@ export const authClient = createAuthClient({
      */
     passkey.plugin,
     expoClient({
-      scheme: 'arbinifamily',
-      storagePrefix: 'arbinifamily',
+      scheme: APP_URL_SCHEME,
+      storagePrefix: AUTH_STORAGE_PREFIX,
       storage: SecureStore,
     }),
   ],
