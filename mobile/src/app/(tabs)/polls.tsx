@@ -1,7 +1,8 @@
-import type { PollDto, PollOptionDto, ReplyKindDto } from '@server/api/v1/dto';
+import type { PollDto, PollMemberDto, PollOptionDto, ReplyKindDto } from '@server/api/v1/dto';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Page } from '@/components/page';
+import { PersonBadge } from '@/components/person-badge';
 import { Copy, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -75,7 +76,13 @@ function Poll({ poll }: { poll: PollDto }) {
 
       <RuledList>
         {poll.options.map((option) => (
-          <Option key={option.id} pollId={poll.id} option={option} locked={settled} />
+          <Option
+            key={option.id}
+            pollId={poll.id}
+            option={option}
+            members={poll.members ?? []}
+            locked={settled}
+          />
         ))}
       </RuledList>
 
@@ -97,10 +104,13 @@ const ANSWERS: { kind: ReplyKindDto; label: string }[] = [
 function Option({
   pollId,
   option,
+  members,
   locked,
 }: {
   pollId: string;
   option: PollOptionDto;
+  /** The roster, in board order. Empty on a build older than the field — draw nothing then. */
+  members: PollMemberDto[];
   locked: boolean;
 }) {
   const theme = useTheme();
@@ -150,6 +160,22 @@ function Option({
           .filter(Boolean)
           .join(' · ')}
       </Copy>
+
+      {members.length > 0 ? (
+        <View style={styles.faces}>
+          {members.map((member) => (
+            <PersonBadge
+              key={member.profileId}
+              profileId={member.profileId}
+              avatarPath={member.avatarPath}
+              size={24}
+              // Dimmed rather than absent: silence is a gap in the data, not a refusal, and a
+              // strip that dropped the quiet ones would read as a smaller family.
+              style={option.replyByProfileId?.[member.profileId] ? undefined : styles.silent}
+            />
+          ))}
+        </View>
+      ) : null}
 
       {waitingOn.length > 0 && !locked ? (
         <Copy muted style={styles.waitingOn}>
@@ -233,6 +259,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
     overflow: 'hidden',
+  },
+  faces: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+  },
+  silent: {
+    opacity: 0.35,
   },
   tally: {
     fontSize: 14,

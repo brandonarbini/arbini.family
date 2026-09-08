@@ -134,7 +134,7 @@ function Presence({ board }: { board: BoardDto }) {
       <RuledList>
         {board.presence.map((row) => (
           <View key={row.profileId} style={styles.presenceRow}>
-            <PersonBadge name={row.name} size={40} />
+            <PersonBadge profileId={row.profileId} avatarPath={row.avatarPath} size={40} />
             <Copy style={styles.presenceName}>{row.name}</Copy>
             {row.place ? (
               <Copy muted style={styles.presencePlace}>

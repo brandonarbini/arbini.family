@@ -65,6 +65,8 @@ export interface PresenceDto {
   place: PlaceDto | null;
   /** Last day at that place; null for an open-ended stay, or when nothing is recorded. */
   until: CalendarDateString | null;
+  /** Where to fetch this person's avatar — see the note at the foot of this file. */
+  avatarPath?: string;
 }
 
 /** The next day everyone is in the same place. */
@@ -172,6 +174,8 @@ export interface StayDto {
 export interface StayListDto {
   profileId: string;
   name: string;
+  /** Where to fetch this person's avatar — see the note at the foot of this file. */
+  avatarPath?: string;
   stays: StayDto[];
 }
 
@@ -205,6 +209,20 @@ export type PollStatusDto = "OPEN" | "SETTLED";
 export type ReplyKindDto = "YES" | "MAYBE" | "NO";
 
 /**
+ * One person on the poll, for a client that needs to draw them.
+ *
+ * Ids as well as names, unlike the tally arrays below. Those answer "who said yes", which a name
+ * answers perfectly well; this answers "who is on this poll", and an avatar is fetched per
+ * `profileId` — see `/api/v1/avatars`.
+ */
+export interface PollMemberDto {
+  profileId: string;
+  name: string;
+  /** Where to fetch this person's avatar — see the note at the foot of this file. */
+  avatarPath?: string;
+}
+
+/**
  * One date option on a poll, already tallied.
  *
  * Names rather than profile ids, for the same reason the agenda resolves its own: the server holds
@@ -228,6 +246,14 @@ export interface PollOptionDto {
   myReply: ReplyKindDto | null;
   /** True when the poll settled on this option. */
   isSettled: boolean;
+  /**
+   * Each person's answer to this option, by profile id. Absent from the map means silent — the
+   * same third state the name arrays keep apart, expressed as a missing key rather than a null.
+   *
+   * Optional because a binary built before this existed will not find it. Draw nothing in that
+   * case; the tally arrays above still say everything they always said.
+   */
+  replyByProfileId?: Record<string, ReplyKindDto>;
 }
 
 export interface PollDto {
@@ -241,7 +267,29 @@ export interface PollDto {
   /** True while any option is still waiting on the viewer. */
   awaitingYou: boolean;
   options: PollOptionDto[];
+  /**
+   * Everyone the poll is asking, in board order. One roster for the whole poll rather than one per
+   * option, because it is the same five people every time.
+   */
+  members?: PollMemberDto[];
 }
+
+/**
+ * ## `avatarPath`
+ *
+ * A path onto `/api/v1/avatars/{profileId}`, carrying a `v` parameter that is the content hash of
+ * the avatar itself.
+ *
+ * Sent by the server rather than assembled by the client, and the version is the whole reason.
+ * A native image cache keys on the URL and does not necessarily re-ask the server, so a URL that
+ * never changes is a face that never changes — and the point of serving avatars from an endpoint
+ * is that restyling them, or replacing one with a photograph, reaches a phone that has already
+ * shipped. It only does if the URL moves when the picture does.
+ *
+ * Optional, so a binary built before this existed still finds the shape it expects. Such a client
+ * builds the unversioned URL itself and gets a one-hour cache and an ETag, which is what it always
+ * had.
+ */
 
 /** The body of `PUT /api/v1/polls/:pollId/options/:optionId/reply`. */
 export interface ReplyInputDto {

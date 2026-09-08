@@ -81,9 +81,10 @@ src/app/            Expo Router routes
   stay/               new + [id], both presented as form sheets
 src/components/     Section / RuledList / Copy / DateStamp — the newspaper primitives
                     Page — masthead and paper ground, the native counterpart of app-shell.tsx
+                    PersonBadge — an <Image> onto /api/v1/avatars, not a local drawing
 src/constants/      theme.ts — tokens ported from the web's globals.css
 src/lib/            api.ts + queries.ts (the /api/v1 client), auth-client.ts, env.ts
-src/hooks/          color scheme + theme
+src/hooks/          color scheme + theme, and the session cookie an <Image> has to carry
 assets/             wordmark.svg + mark.svg, and the PNGs generated from them
 scripts/            build-assets.mjs
 ```
@@ -93,6 +94,16 @@ scripts/            build-assets.mjs
 The tokens in `src/constants/theme.ts` are converted from the oklch values in the web app's
 `app/globals.css` — warm paper ground, square corners, rules drawn in ink rather than a grey chosen
 to disappear.
+
+Avatars are the one exception to the square corners, and they are not drawn here at all. The server
+generates them — `lib/avatars/beam.ts`, served from `/api/v1/avatars/{profileId}` — so a restyle,
+or a real photograph, reaches this app without a rebuild. `PersonBadge` is an `expo-image` onto
+that URL, carrying the session cookie by hand because React Native has no cookie jar.
+
+The URL is not assembled here: it arrives on the board as `avatarPath`, with a `v` parameter that
+is the content hash of the picture. The image cache keys on the URL and does not re-ask the server
+about a file it already holds, so a changed face has to arrive at a changed address or it never
+arrives at all.
 
 Neither Typekit face comes across, because Adobe Fonts does not licence embedding a font in an app
 binary. They are handled differently:
