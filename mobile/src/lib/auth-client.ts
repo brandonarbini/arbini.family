@@ -69,7 +69,8 @@ export const authClient = createAuthClient({
  * The session cookie, for requests this app makes outside Better Auth's own client.
  *
  * `authClient.$fetch` attaches credentials on its own, but a plain `fetch` to `/api/v1/*` does
- * not — there is no cookie jar doing it invisibly. `mobile/src/lib/api.ts` is the only caller.
+ * not — there is no cookie jar doing it invisibly. Two callers: `mobile/src/lib/api.ts`, and
+ * `use-auth-cookie.ts`, which hands the same header to `expo-image` for an avatar.
  */
 export async function getSessionCookie(): Promise<string> {
   return authClient.getCookie();

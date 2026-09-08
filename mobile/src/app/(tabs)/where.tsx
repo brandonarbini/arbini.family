@@ -3,6 +3,7 @@ import { Link } from 'expo-router';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Page } from '@/components/page';
+import { PersonBadge } from '@/components/person-badge';
 import { Copy, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -54,11 +55,22 @@ function StayList({ list, today }: { list: StayListDto; today: string }) {
   return (
     <Section title={list.name}>
       {list.stays.length === 0 ? (
-        <Copy muted>Nothing recorded. Until there is, the board shows them as unknown.</Copy>
+        <View style={styles.row}>
+          <PersonBadge profileId={list.profileId} avatarPath={list.avatarPath} size={28} />
+          <Copy muted style={styles.rowText}>
+            Nothing recorded. Until there is, the board shows them as unknown.
+          </Copy>
+        </View>
       ) : (
         <RuledList>
           {list.stays.map((stay) => (
-            <StayRow key={stay.id} stay={stay} today={today} />
+            <StayRow
+              key={stay.id}
+              stay={stay}
+              profileId={list.profileId}
+              avatarPath={list.avatarPath}
+              today={today}
+            />
           ))}
         </RuledList>
       )}
@@ -77,7 +89,17 @@ function StayList({ list, today }: { list: StayListDto; today: string }) {
   );
 }
 
-function StayRow({ stay, today }: { stay: StayDto; today: string }) {
+function StayRow({
+  stay,
+  profileId,
+  avatarPath,
+  today,
+}: {
+  stay: StayDto;
+  profileId: string;
+  avatarPath?: string;
+  today: string;
+}) {
   const theme = useTheme();
   const openEnded = stay.endsOn === null;
   // A stay whose last day has passed is history, not plan. Worth showing — it is how you notice a
@@ -91,6 +113,10 @@ function StayRow({ stay, today }: { stay: StayDto; today: string }) {
     <Link href={{ pathname: '/stay/[id]', params: { id: stay.id } }} asChild>
       <Pressable style={({ pressed }) => ({ opacity: pressed ? 0.6 : past ? 0.55 : 1 })}>
         <View style={styles.row}>
+          {/* Whose stay this is. Every row in a section belongs to the same person, which is what
+              the section head already says — but the web repeats the face down the list, and a
+              column of them is what makes a section scannable rather than a wall of dates. */}
+          <PersonBadge profileId={profileId} avatarPath={avatarPath} size={28} />
           <View style={styles.rowText}>
             <Copy style={styles.place}>{stay.place.name}</Copy>
             <Copy muted style={styles.dates}>

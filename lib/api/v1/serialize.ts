@@ -12,6 +12,7 @@ import type {
   PollDto,
   PollOptionDto,
   PresenceDto,
+  ReplyKindDto,
   StayDto,
   WhereDto,
 } from "@/lib/api/v1/dto";
@@ -21,6 +22,7 @@ import type {
   FamilyMember,
   Place,
 } from "@/lib/board/data";
+import { avatarPath } from "@/lib/avatars/path";
 import { tallyPoll } from "@/lib/polls/tally";
 import type { EditorData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
@@ -61,6 +63,7 @@ function toPresenceDto(row: BoardView["presence"][number]): PresenceDto {
   return {
     profileId: row.member.profileId,
     name: row.member.name,
+    avatarPath: avatarPath(row.member.profileId, row.member.name),
     place: row.place ? toPlaceDto(row.place) : null,
     until: row.until,
   };
@@ -181,6 +184,7 @@ export function toWhereDto(
     lists: data.stayLists.map((list) => ({
       profileId: list.member.profileId,
       name: list.member.name,
+      avatarPath: avatarPath(list.member.profileId, list.member.name),
       stays: list.stays.flatMap((stay) => {
         const place = placesById.get(stay.placeId);
         // A stay whose place has been deleted cannot be rendered or safely edited, and sending it
@@ -234,6 +238,13 @@ export function toPollDto(
       (reply) => reply.profileId === viewerProfileId,
     );
 
+    // Silence is a missing key, not a null: the tally counts it as its own state, and a map that
+    // held everyone would make "has not answered" and "answered nothing" the same shape.
+    const replyByProfileId: Record<string, ReplyKindDto> = {};
+    for (const id of tally.yesBy) replyByProfileId[id] = "YES";
+    for (const id of tally.maybeBy) replyByProfileId[id] = "MAYBE";
+    for (const id of tally.noBy) replyByProfileId[id] = "NO";
+
     return {
       id: tally.optionId,
       startsOn: window?.startsOn ?? "",
@@ -245,6 +256,7 @@ export function toPollDto(
       everyoneCanMake: tally.everyoneCanMake,
       myReply: mine?.kind ?? null,
       isSettled: poll.settledOptionId === tally.optionId,
+      replyByProfileId,
     };
   });
 
@@ -260,6 +272,14 @@ export function toPollDto(
       poll.status === "OPEN" &&
       tallies.some((tally) => tally.silentBy.includes(viewerProfileId)),
     options,
+    // `members` is already in board order — `getFamilyMembers` sorts it — and the client draws it
+    // in the order it arrives, so the avatars read down a poll the same way they read down the
+    // board.
+    members: members.map((member) => ({
+      profileId: member.profileId,
+      name: member.name,
+      avatarPath: avatarPath(member.profileId, member.name),
+    })),
   };
 }
 

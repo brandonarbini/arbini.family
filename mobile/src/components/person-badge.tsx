@@ -1,46 +1,75 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import type { ImageStyle, StyleProp } from 'react-native';
 
-import { Fonts, Radius } from '@/constants/theme';
+import { useAuthCookie } from '@/hooks/use-auth-cookie';
 import { useTheme } from '@/hooks/use-theme';
+import { env } from '@/lib/env';
 
 /**
- * A square initial in a ruled box, standing in for the web's generated avatar.
+ * A person's avatar, fetched from the board.
  *
- * The web uses `boring-avatars` to draw a deterministic pattern per person. That is a
- * React-DOM-and-SVG library, so rather than pull an SVG renderer into the app for one glyph on
- * one screen, the native badge does what the rest of the design already does: a rule, a right
- * angle, and type. Square, because nothing else here is round.
+ * The picture comes from `/api/v1/avatars/{profileId}` rather than being drawn here. The generator
+ * is `lib/avatars/beam.ts` on the server, and it stays there on purpose: an avatar ported into
+ * this app would be frozen into whatever binary was shipped, so restyling them — or letting
+ * somebody use an actual photograph — would be wrong on every installed phone until it was
+ * rebuilt. Behind a URL, both are a deploy, and the phone and the browser cannot drift.
+ *
+ * The URL comes off the board rather than being assembled here, because it carries a version. The
+ * cache below keys on the URL and will not re-ask the server about a file it already holds, so a
+ * new face has to arrive at a new address or it never arrives at all.
+ *
+ * Round, which is the one place this app breaks its own rule about corners (`Radius` is 0, and
+ * everything else here is square). The web has drawn these as circles since the beginning, and two
+ * clients disagreeing about a person's face is worse than one exception to a house style.
  */
-export function PersonBadge({ name, size = 40 }: { name: string; size?: number }) {
+export function PersonBadge({
+  profileId,
+  avatarPath,
+  size = 40,
+  style,
+}: {
+  profileId: string;
+  /**
+   * The versioned path the server sent alongside this person. Absent only if the board is older
+   * than the field, which the fallback below covers — and which costs nothing but the version.
+   */
+  avatarPath?: string;
+  size?: number;
+  /** For the caller that dims a row — see the poll options. */
+  style?: StyleProp<ImageStyle>;
+}) {
   const theme = useTheme();
-  const initial = name.trim().charAt(0).toUpperCase() || '?';
+  const { data: cookie } = useAuthCookie();
 
   return (
-    <View
+    <Image
+      // Null until the keychain answers, which is a frame or two on a cold start. The style below
+      // holds the space either way, so nothing moves when the face arrives.
+      source={
+        cookie
+          ? {
+              uri: `${env.apiUrl}${avatarPath ?? `/api/v1/avatars/${profileId}`}`,
+              headers: { Cookie: cookie },
+            }
+          : null
+      }
       style={[
-        styles.badge,
         {
           width: size,
           height: size,
-          borderColor: theme.border,
+          borderRadius: size / 2,
+          // Doubles as the placeholder: an empty disc in the paper's own grey, rather than a hole.
           backgroundColor: theme.backgroundElement,
         },
+        style,
       ]}
-    >
-      <Text style={[styles.initial, { color: theme.text, fontSize: size * 0.45 }]}>{initial}</Text>
-    </View>
+      contentFit="cover"
+      // Long enough to read as a fade rather than a flicker, short enough not to feel like a load.
+      transition={150}
+      cachePolicy="memory-disk"
+      // The name is rendered as text beside every one of these; announcing it again would just
+      // make a screen reader say it twice.
+      accessible={false}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  badge: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  initial: {
-    fontFamily: Fonts.serif,
-    fontWeight: '500',
-  },
-});
