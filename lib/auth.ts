@@ -30,14 +30,33 @@ const FAMILY_ALLOWLIST = parseFamilyEmails(env.FAMILY_EMAILS);
 const MAGIC_LINK_TTL_SECONDS = 600;
 
 /**
- * Where the native app may be sent once it has proved who it is.
+ * The native app's origin, and where it may be sent once it has proved who it is.
  *
- * Pinned to a path rather than the bare scheme. Better Auth matches custom-scheme origins on
- * scheme, authority and path (see `dist/auth/trusted-origins.mjs`, which parses them with string
- * operations rather than `new URL()` because non-special schemes parse inconsistently across
- * runtimes). `arbinifamily://` alone would trust every destination in the app; this trusts one.
+ * The bare scheme, and it has to be. This was `arbinifamily://auth` — pinned to a path, on the
+ * reasoning that trusting one destination beats trusting every destination in the app. That
+ * reasoning was wrong twice over, and it rejected every request the app made with a 403.
+ *
+ * Wrong on mechanics first. Better Auth parses a custom-scheme origin into scheme, authority and
+ * path with string operations rather than `new URL()` (see `dist/auth/trusted-origins.mjs`;
+ * non-special schemes parse inconsistently across runtimes). In `arbinifamily://auth`, `auth` is
+ * the *authority*, not a path — there is no third slash. The app, meanwhile, identifies itself as
+ * `arbinifamily:///`: `@better-auth/expo` sends `Linking.createURL("", { scheme })` as an
+ * `expo-origin` header, which `expo()` promotes to `Origin` because a native fetch sends none.
+ * That value has an empty authority, so an authority-pinned pattern could never match it. The
+ * *same string* passed as `callbackURL` matched fine, which is why this survived review: the
+ * callback was tested and the origin was not.
+ *
+ * Wrong on threat model second, and this is why the fix is not a second pinned entry. Any pattern
+ * that admits an empty authority admits every authority — so there is no form of this that both
+ * accepts the app and pins a destination. Nothing is lost by admitting that: the boundary a custom
+ * scheme draws is ownership of the scheme itself, and an app hostile enough to register
+ * `arbinifamily` can equally claim `arbinifamily://auth`. Pinning the authority never kept
+ * anything out; it only kept our own app out.
+ *
+ * What still holds the line is unchanged: a magic link is single-use, hashed at rest, and expires
+ * in ten minutes, and `sendMagicLink` below posts nothing to an address outside the family.
  */
-const APP_CALLBACK_ORIGIN = `${APP_URL_SCHEME}://auth`;
+const APP_ORIGIN = `${APP_URL_SCHEME}://`;
 
 export const auth = betterAuth({
   // Pinned from configuration, never from the `Host` header — see lib/urls.ts.
@@ -51,17 +70,24 @@ export const auth = betterAuth({
     // which do not fit a uuid column — the insert fails with a type error rather than anything
     // that names the cause.
     database: { generateId: false },
+
+    // Explicitly false, which is already the behaviour everywhere but under Vitest. Better Auth
+    // skips the origin check when NODE_ENV is "test" unless this is set (see
+    // `dist/context/create-context.mjs`) — so without this line, an origin the app cannot pass
+    // still returns 200 in the suite, and the first version of lib/auth.test.ts passed against
+    // the very configuration that was rejecting every request from the phone. A check that is off
+    // in tests is a check that gets its first real exercise on a device.
+    disableOriginCheck: false,
   },
 
   // Explicit rather than omitted. There is no password anywhere in this app, and the schema's
   // `Account.password` column exists only because Better Auth's adapter expects it.
   emailAndPassword: { enabled: false },
 
-  // Where the native app may be sent after it proves who it is. The web's own origin is trusted
-  // implicitly; this adds the one custom scheme, and nothing else. The expo plugin additionally
-  // trusts `exp://` — but only when NODE_ENV is development, so the Expo Go convenience cannot
-  // reach production.
-  trustedOrigins: [APP_CALLBACK_ORIGIN],
+  // The web's own origin is trusted implicitly; this adds the one custom scheme, and nothing
+  // else. The expo plugin additionally trusts `exp://` — but only when NODE_ENV is development,
+  // so the Expo Go convenience cannot reach production.
+  trustedOrigins: [APP_ORIGIN],
 
   // Backed by the RateLimit table rather than in-memory counters, so the limits survive a cold
   // start. An in-process counter resets whenever a new instance boots, which is exactly the
