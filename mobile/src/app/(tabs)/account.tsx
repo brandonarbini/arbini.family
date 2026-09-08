@@ -1,3 +1,4 @@
+import * as Device from 'expo-device';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
@@ -8,6 +9,23 @@ import { useTheme } from '@/hooks/use-theme';
 import { authClient, passkeysSupported } from '@/lib/auth-client';
 
 type Status = 'idle' | 'adding' | 'added' | 'error';
+
+/**
+ * What this passkey is called in the list at arbini.family/account.
+ *
+ * The name is the only way to tell two credentials apart once they are in the list — there is
+ * nothing else on screen but a date — so it is worth more than "This phone", which is true of
+ * every phone and useful on none of them. The web's own `deviceLabel()` in
+ * app/account/passkey-controls.tsx has to guess from a user-agent string and gets no further than
+ * "iPhone or iPad"; here the device will simply say.
+ *
+ * `modelName` rather than `deviceName`: since iOS 16 the user-assigned name ("Brandon's iPhone")
+ * is gated behind an entitlement Apple grants case by case, and without it `deviceName` returns
+ * the model anyway — via an API that reads like it returns something better.
+ */
+function passkeyName(): string {
+  return Device.modelName ?? 'iPhone';
+}
 
 /**
  * Account: add a passkey to this device, and sign out.
@@ -26,15 +44,35 @@ export default function AccountScreen() {
     setStatus('adding');
     setError(null);
 
-    const result = await authClient.passkey.addPasskey({ name: 'This phone' });
+    const name = passkeyName();
+    const result = await authClient.passkey.addPasskey({ name });
 
     if (result?.error) {
+      // Cancelling is not a failure. The sheet was dismissed on purpose, and an error where an
+      // answer was expected reads as a bug in the app rather than as the thing that just happened.
+      // `code` is only on the errors this app raises from the native call; a failure from the
+      // server arrives as a plain `{ message?, status }`. The `in` check is what tells them apart.
+      if ('code' in result.error && result.error.code === 'AUTH_CANCELLED') {
+        setStatus('idle');
+        return;
+      }
+
+      // Say what went wrong, when there is something to say.
+      //
+      // This used to be one fixed sentence, on the reasoning that the causes — a missing
+      // entitlement, an association document the platform could not fetch — were nothing the
+      // person holding the phone could act on. That was true of the module this replaced, which
+      // reported every outcome as "auth cancelled". It is not true now: react-native-passkeys
+      // distinguishes a dismissed sheet from disabled biometrics from a misconfigured
+      // apple-app-site-association, and two of those three are things you can actually go and fix.
+      // Throwing that away to keep the copy tidy is how "could not add a passkey" ends up being
+      // the only thing anyone ever learns.
+      console.warn('[account] addPasskey failed', result.error);
       setStatus('error');
       setError(
-        // The overwhelmingly likely causes are a build without the associated-domain entitlement
-        // or an association document the platform could not fetch — neither of which the person
-        // holding the phone can do anything about, so the message does not pretend otherwise.
-        'Could not add a passkey on this device. The email link still works.',
+        result.error.message
+          ? `Could not add a passkey: ${result.error.message}`
+          : 'Could not add a passkey on this device. The email link still works.',
       );
       return;
     }
@@ -58,7 +96,9 @@ export default function AccountScreen() {
             build can.
           </Copy>
         ) : status === 'added' ? (
-          <Copy>Added. Face ID will sign you in from now on.</Copy>
+          // Naming it back is not decoration: it is the string that will identify this credential
+          // on the website, and the only moment anyone can connect the two.
+          <Copy>Added as “{passkeyName()}”. Face ID will sign you in from now on.</Copy>
         ) : (
           <>
             <Copy muted>
