@@ -1,0 +1,156 @@
+/**
+ * The v1 wire contract: what `/api/v1/*` sends, described once, for both sides.
+ *
+ * **This file must have no imports.** The Expo app type-checks against it directly, through a
+ * `@server/*` path alias, and its TypeScript has none of the web's dependencies — no Prisma
+ * client, no zod. Types are erased at compile time, so Metro never resolves this at runtime and
+ * no shared package is needed; the price of that convenience is that the file has to stand alone.
+ *
+ * It is also deliberately *not* the internal types re-exported. Two reasons, and the second is the
+ * one that matters:
+ *
+ * 1. The internal shapes do not survive JSON. `BoardPoll.createdAt` is a `Date`; `Response.json()`
+ *    makes it a string, so a handler returning the internal type type-checks against a lie.
+ * 2. A shipped app binary cannot be re-deployed. Someone on last month's build will call this
+ *    week's server, so the wire shape has to be a thing that changes deliberately rather than
+ *    whatever the database happened to look like. `lib/api/v1/serialize.ts` is where the two meet,
+ *    and it is the place a breaking change becomes visible instead of silent.
+ *
+ * Anything added here is a promise to a binary you no longer control. Add optional fields; do not
+ * repurpose existing ones.
+ */
+
+/**
+ * A calendar date as `YYYY-MM-DD`.
+ *
+ * The board is date-based, never instant-based: a stay covers days, not moments. The web brands
+ * this type in `lib/dates.ts`; here it is a plain string because this file cannot import that
+ * brand — the shape on the wire is identical either way.
+ *
+ * Always resolved in the family's timezone by the server. The client must never compute "today"
+ * itself: a phone in another timezone would otherwise show a different board than the fridge.
+ */
+export type CalendarDateString = string;
+
+/** Mirrors the `FamilyRole` enum in schema.prisma. */
+export type FamilyRoleDto = "PARENT" | "KID";
+
+export interface PlaceDto {
+  id: string;
+  name: string;
+  isHome: boolean;
+}
+
+export interface MemberDto {
+  profileId: string;
+  name: string;
+  role: FamilyRoleDto;
+  /** The per-person accent from `Profile.color`, or null when unset. */
+  color: string | null;
+}
+
+/** Who is signed in, and what they are allowed to do. */
+export interface MeDto {
+  profileId: string;
+  name: string;
+  email: string;
+  role: FamilyRoleDto;
+}
+
+/** Where one person is today. */
+export interface PresenceDto {
+  profileId: string;
+  name: string;
+  /** Null means nothing is recorded — which is not the same as being at home. */
+  place: PlaceDto | null;
+  /** Last day at that place; null for an open-ended stay, or when nothing is recorded. */
+  until: CalendarDateString | null;
+}
+
+/** The next day everyone is in the same place. */
+export interface GatheringDto {
+  date: CalendarDateString;
+  place: PlaceDto;
+  /** Zero when it is today. */
+  inDays: number;
+}
+
+/**
+ * One line of the agenda, with ids already resolved to names.
+ *
+ * Resolving server-side rather than shipping lookup tables: the server holds the data anyway, and
+ * the alternative is every client reimplementing the same join. Dates stay as calendar dates
+ * rather than formatted strings, because *formatting* is presentation and belongs to the client —
+ * but *which day it is* is a fact, and that belongs to the server.
+ */
+export type AgendaEntryDto =
+  | {
+      kind: "arrival" | "departure";
+      date: CalendarDateString;
+      profileId: string;
+      personName: string;
+      placeName: string;
+    }
+  | {
+      kind: "birthday";
+      date: CalendarDateString;
+      profileId: string;
+      personName: string;
+      turning: number;
+    }
+  | {
+      kind: "event";
+      date: CalendarDateString;
+      eventId: string;
+      title: string;
+      note: string | null;
+    };
+
+/**
+ * A poll waiting on the person who asked for the board.
+ *
+ * `waitingOnName` is the poll's author, or null when that is the viewer themselves — you can
+ * perfectly well owe an answer to your own poll, but being told so in the third person reads as
+ * a bug, so the server sends null and the client says "you haven't answered yet".
+ */
+export interface AwaitingPollDto {
+  id: string;
+  title: string;
+  waitingOnName: string | null;
+}
+
+/** Everything `/home` renders, in one response. */
+export interface BoardDto {
+  /** The family's today, authoritative. */
+  today: CalendarDateString;
+  awaiting: AwaitingPollDto[];
+  gathering: GatheringDto | null;
+  presence: PresenceDto[];
+  agenda: AgendaEntryDto[];
+  /** How many days ahead `agenda` looks, so the client can label the section honestly. */
+  agendaWindowDays: number;
+}
+
+// --- Errors ------------------------------------------------------------------
+
+/**
+ * Machine-readable failure codes. The client switches on these, never on the message — messages
+ * are for people and may be reworded at any time.
+ */
+export type ApiErrorCode =
+  "unauthenticated" | "forbidden" | "not_found" | "invalid_input" | "internal";
+
+/**
+ * The body of any non-2xx response.
+ *
+ * `fieldErrors` keeps the exact `Record<string, string[]>` shape of `ActionResult` on the web, so
+ * a native form can render validation failures with the same code the web form uses. The status
+ * code carries the category — unlike a Server Action, HTTP has somewhere to put it.
+ */
+export interface ApiErrorBody {
+  error: {
+    code: ApiErrorCode;
+    message: string;
+    fieldErrors?: Record<string, string[]>;
+  };
+}

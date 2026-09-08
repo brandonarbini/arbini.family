@@ -5,7 +5,7 @@ import { Page } from '@/components/page';
 import { Copy, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authClient } from '@/lib/auth-client';
+import { authClient, passkeysSupported } from '@/lib/auth-client';
 
 type Status = 'idle' | 'adding' | 'added' | 'error';
 
@@ -52,7 +52,12 @@ export default function AccountScreen() {
       </Section>
 
       <Section title="Passkey">
-        {status === 'added' ? (
+        {!passkeysSupported ? (
+          <Copy muted>
+            This build cannot add passkeys — it has no credential module. A development or release
+            build can.
+          </Copy>
+        ) : status === 'added' ? (
           <Copy>Added. Face ID will sign you in from now on.</Copy>
         ) : (
           <>

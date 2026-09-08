@@ -6,6 +6,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { authClient } from '@/lib/auth-client';
+import { QueryProvider } from '@/lib/query-client';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,7 +36,9 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={navigationTheme}>
-      <AuthGate />
+      <QueryProvider>
+        <AuthGate />
+      </QueryProvider>
     </ThemeProvider>
   );
 }

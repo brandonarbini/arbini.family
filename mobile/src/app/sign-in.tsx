@@ -5,7 +5,7 @@ import { Page } from '@/components/page';
 import { Copy, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authClient } from '@/lib/auth-client';
+import { authClient, passkeysSupported } from '@/lib/auth-client';
 
 type Status = 'idle' | 'sending' | 'sent' | 'passkey' | 'error';
 
@@ -134,25 +134,31 @@ export default function SignInScreen() {
         </Pressable>
       </Section>
 
-      <Section title="Or">
-        <Copy muted>
-          If you have already added a passkey — here or on the web — Face ID is enough.
-        </Copy>
-        <Pressable
-          onPress={signInWithPasskey}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            { borderColor: theme.text, opacity: busy ? 0.4 : pressed ? 0.6 : 1 },
-          ]}
-        >
-          {status === 'passkey' ? (
-            <ActivityIndicator color={theme.text} />
-          ) : (
-            <Text style={[styles.buttonLabel, { color: theme.text }]}>USE A PASSKEY</Text>
-          )}
-        </Pressable>
-      </Section>
+      {/*
+        Offered only where the binary can honour it. Expo Go has no passkey native module, and a
+        button that always fails teaches people to distrust the one that works.
+      */}
+      {passkeysSupported ? (
+        <Section title="Or">
+          <Copy muted>
+            If you have already added a passkey — here or on the web — Face ID is enough.
+          </Copy>
+          <Pressable
+            onPress={signInWithPasskey}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              { borderColor: theme.text, opacity: busy ? 0.4 : pressed ? 0.6 : 1 },
+            ]}
+          >
+            {status === 'passkey' ? (
+              <ActivityIndicator color={theme.text} />
+            ) : (
+              <Text style={[styles.buttonLabel, { color: theme.text }]}>USE A PASSKEY</Text>
+            )}
+          </Pressable>
+        </Section>
+      ) : null}
     </Page>
   );
 }

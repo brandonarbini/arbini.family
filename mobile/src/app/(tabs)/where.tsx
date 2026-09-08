@@ -2,9 +2,17 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Page } from '@/components/page';
 import { Copy, RuledList, Section } from '@/components/section';
-import { WHERE_FIXTURE } from '@/constants/fixtures';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+/**
+ * Placeholder rows. `GET /api/v1/where` does not exist yet; this screen keeps its shape so that
+ * landing the endpoint is a change of source, not a redraw.
+ */
+const PLACEHOLDER_STAYS = [
+  { id: 's1', place: 'Home', dates: 'From 1 Sep', note: null, openEnded: true },
+  { id: 's2', place: 'Vanguard', dates: '22 Sep – 26 Sep', note: 'work trip', openEnded: false },
+] as { id: string; place: string; dates: string; note: string | null; openEnded: boolean }[];
 
 /**
  * The stays you have recorded — read-only for now.
@@ -15,10 +23,10 @@ import { useTheme } from '@/hooks/use-theme';
  */
 export default function WhereScreen() {
   const theme = useTheme();
-  const { stays } = WHERE_FIXTURE;
+  const stays = PLACEHOLDER_STAYS;
 
   return (
-    <Page dateline={WHERE_FIXTURE.dateline}>
+    <Page dateline="Where I am">
       <Section title="Where I am">
         {stays.length === 0 ? (
           <Copy muted>Nothing recorded. Until you add a stay, the board shows you as unknown.</Copy>

@@ -8,6 +8,7 @@
     "@expo/ui": "~57.0.16",
     "@lobehub/expo-better-auth-passkey": "^1.0.2",
     "@simplewebauthn/browser": "^13.3.0",
+    "@tanstack/react-query": "^5.102.8",
     "better-auth": "1.7.2",
     "expo": "~57.0.20",
     "expo-constants": "~57.0.17",

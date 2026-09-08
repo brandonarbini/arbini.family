@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ScrollViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Wordmark } from '@/components/wordmark';
@@ -14,7 +15,15 @@ import { useTheme } from '@/hooks/use-theme';
  * A single rule of either weight reads as a divider; the two together read as a masthead, and it
  * is the oldest trick on a front page.
  */
-export function Page({ dateline, children }: { dateline: string; children: React.ReactNode }) {
+export function Page({
+  dateline,
+  children,
+  refreshControl,
+}: {
+  dateline: string;
+  children: React.ReactNode;
+  refreshControl?: ScrollViewProps['refreshControl'];
+}) {
   const theme = useTheme();
 
   return (
@@ -24,6 +33,7 @@ export function Page({ dateline, children }: { dateline: string; children: React
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
+          refreshControl={refreshControl}
         >
           <View style={styles.masthead}>
             <View style={styles.wordmark}>
