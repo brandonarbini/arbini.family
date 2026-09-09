@@ -2,7 +2,6 @@ import "server-only";
 
 import type {
   AgendaEntryDto,
-  AroundDto,
   AwaitingPollDto,
   BoardDto,
   GatheringDto,
@@ -12,13 +11,12 @@ import type {
   PollDto,
   PollOptionDto,
   PresenceDto,
-  PresenceRunDto,
   ReplyKindDto,
 } from "@/lib/api/v1/dto";
-import type { BoardPoll, BoardPresence, FamilyMember } from "@/lib/board/data";
+import type { BoardPoll, FamilyMember } from "@/lib/board/data";
+import { type Actor, canEditProfile } from "@/lib/board/permissions";
 import { avatarPath } from "@/lib/avatars/path";
 import { tallyPoll } from "@/lib/polls/tally";
-import type { StripData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
 import { AGENDA_WINDOW_DAYS } from "@/lib/board/view";
@@ -65,12 +63,17 @@ function toGatheringDto(
   return { date: gathering.date, inDays: gathering.inDays };
 }
 
-function toGridRowDto(row: BoardView["grid"][number]): GridRowDto {
+function toGridRowDto(
+  row: BoardView["grid"][number],
+  actor: Actor | null,
+): GridRowDto {
   return {
     profileId: row.member.profileId,
     name: row.member.name,
     avatarPath: avatarPath(row.member.profileId, row.member.name),
     days: row.days,
+    horizon: row.horizon,
+    editable: actor ? canEditProfile(actor, row.member.profileId) : false,
   };
 }
 
@@ -136,6 +139,7 @@ export function toBoardDto(
   awaiting: BoardPoll[],
   viewerUserId: string,
   viewerProfileId: string,
+  actor: Actor | null,
 ): BoardDto {
   return {
     today: view.today,
@@ -150,49 +154,13 @@ export function toBoardDto(
     })),
     presence: view.presence.map(toPresenceDto),
     gridDays: view.gridDays,
-    grid: view.grid.map(toGridRowDto),
+    grid: view.grid.map((row) => toGridRowDto(row, actor)),
     agenda: toAgendaDto(view.agenda, view.membersByProfileId),
     agendaWindowDays: AGENDA_WINDOW_DAYS,
   };
 }
 
 // --- Presence ----------------------------------------------------------------
-
-/**
- * The Around screen's data.
- *
- * `strips` carries only the people the viewer may edit — `getStripData` has already narrowed that
- * from the actor's role. The client does not filter: a strip it cannot change is a strip it should
- * never have been shown, and deciding that here means one answer rather than one per client.
- */
-export function toAroundDto(
-  data: StripData,
-  viewerProfileId: string,
-): AroundDto {
-  return {
-    today: data.today,
-    through: data.through,
-    viewerProfileId,
-    strips: data.strips.map((strip) => ({
-      profileId: strip.member.profileId,
-      name: strip.member.name,
-      avatarPath: avatarPath(strip.member.profileId, strip.member.name),
-      runs: strip.runs.map(toPresenceRunDto),
-      horizon: strip.horizon,
-    })),
-  };
-}
-
-function toPresenceRunDto(run: BoardPresence): PresenceRunDto {
-  return {
-    id: run.id,
-    profileId: run.profileId,
-    state: run.state,
-    startsOn: run.startsOn,
-    endsOn: run.endsOn,
-    note: run.note,
-  };
-}
 
 // --- Polls -------------------------------------------------------------------
 

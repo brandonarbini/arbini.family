@@ -19,10 +19,11 @@ import {
 } from "@/lib/dates";
 import { tallyPoll } from "@/lib/polls/tally";
 import {
+  type Horizon,
   type PresenceState,
   coveringOn,
   findNextGathering,
-  statesOn,
+  horizonFrom,
   unsaidOn,
 } from "@/lib/presence/derive";
 
@@ -73,10 +74,33 @@ export interface NextGathering {
  * "not recorded". Fourteen cells answer the planning question instead: you can see at a glance
  * where the family overlaps, who has run out of days, and which weekend is already spoken for.
  */
+/** One day in the fortnight, for one person. */
+export interface GridCell {
+  /** `null` is unsaid, and drawn as a gap rather than as a third kind of mark. */
+  state: PresenceState | null;
+  /**
+   * The run's note, carried per *cell* rather than per person.
+   *
+   * The board only ever draws the one covering today, so this looks redundant — it is here for
+   * undo. Painting over a day deletes the statement that was there, note and all, and an undo
+   * that restored the state but dropped the reason would quietly lose the only writing anybody
+   * does in this app.
+   */
+  note: string | null;
+}
+
 export interface GridRow {
   member: FamilyMember;
-  /** One entry per day from `today`, in order. `null` is unsaid, and drawn as a gap. */
-  days: (PresenceState | null)[];
+  /** One entry per day from `today`, in order. */
+  days: GridCell[];
+  /**
+   * How far ahead this person has spoken, counting from today without a gap.
+   *
+   * The grid shows a fortnight; this says whether they have run out of it. "Said through Sunday"
+   * is a fact somebody can check against their own week, where fourteen dashed circles is a
+   * picture they have to count.
+   */
+  horizon: Horizon;
 }
 
 export async function getBoardView(today: CalendarDate) {
@@ -133,10 +157,16 @@ export async function getBoardView(today: CalendarDate) {
     today,
     addCalendarDays(today, GRID_DAYS - 1),
   );
-  const byDay = gridDays.map((day) => statesOn(presenceRows, profileIds, day));
+  const byDay = gridDays.map((day) =>
+    coveringOn(presenceRows, profileIds, day),
+  );
   const grid: GridRow[] = members.map((member) => ({
     member,
-    days: byDay.map((states) => states.get(member.profileId) ?? null),
+    days: byDay.map((covering) => {
+      const run = covering.get(member.profileId) ?? null;
+      return { state: run?.state ?? null, note: run?.note ?? null };
+    }),
+    horizon: horizonFrom(presenceRows, member.profileId, today),
   }));
 
   const agenda: AgendaEntry[] = buildAgenda({

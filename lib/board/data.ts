@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 /**
  * Shared reads for the family board.
  *
- * Lives in `/lib` rather than beside a route because both `/home` and `/home/around` need the same
+ * Lives in `/lib` rather than beside a route because the board and the API both need the same
  * rows, and a webhook or script would too.
  *
  * This module is also the *boundary*: `@db.Date` columns are converted to `CalendarDate` strings

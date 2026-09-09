@@ -1,10 +1,7 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import {
-  type ActionResult,
-  presenceFormSchema,
-} from "@/app/home/around/validations";
+import { type ActionResult, presenceFormSchema } from "@/app/home/validations";
 import { requireProfile } from "@/lib/auth-helpers";
 import { BOARD_TAGS } from "@/lib/board/cache";
 import { canEditProfile } from "@/lib/board/permissions";
@@ -12,7 +9,7 @@ import { getPresenceForProfileUncached } from "@/lib/board/data";
 import { setPresence } from "@/lib/board/service";
 
 /**
- * The one mutation the Around strip has.
+ * The one mutation the board has.
  *
  * The same thin shell every action here is: authenticate, validate, authorize, call the service,
  * then invalidate. Every failure is *returned* rather than thrown — a thrown error reaches the
@@ -30,7 +27,7 @@ export async function savePresence(
   _previous: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  const actor = await requireProfile("/home/around");
+  const actor = await requireProfile("/home");
 
   const parsed = presenceFormSchema.safeParse({
     profileId: formData.get("profileId") ?? undefined,

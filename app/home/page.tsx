@@ -4,7 +4,9 @@ import {
   getBoardView,
   getPollsAwaiting,
 } from "@/lib/board/view";
-import { cn } from "@/lib/utils";
+import { Fortnight, type FortnightRow } from "@/app/home/fortnight";
+import { canEditProfile } from "@/lib/board/permissions";
+import type { FamilyRole } from "@/generated/prisma/enums";
 import { PersonBadge } from "@/components/person-badge";
 import { RuledList, Section } from "@/components/ui/section";
 import { requireAuth } from "@/lib/auth-helpers";
@@ -33,7 +35,7 @@ export default async function BoardPage() {
       <YourTurn polls={awaiting} viewerUserId={user.id} />
       <Today board={board} />
       <Gathering board={board} viewerProfileId={user.profileId} />
-      <Grid board={board} />
+      <TheFortnight board={board} user={user} />
       <Agenda board={board} />
     </div>
   );
@@ -179,23 +181,28 @@ function Gathering({
                 ),
               )}
             </p>
+            {/*
+              No link: the fortnight it would have pointed at is on this page, just below. And the
+              sentence stops promising a countdown it cannot deliver — saying your own days does
+              not start it unless you were the last one left.
+            */}
             <p className="font-copy mt-2 text-base text-muted-foreground">
-              <Link
-                href="/home/around"
-                className="underline underline-offset-4"
-              >
-                Say which days you&rsquo;ll be around
-              </Link>{" "}
-              and the countdown starts.
+              {board.unsaidToday.length === 1 &&
+              board.unsaidToday[0].profileId === viewerProfileId
+                ? "You're the last one — say your days below and it starts."
+                : "Say your days below."}
             </p>
           </>
         ) : (
+          /*
+            Never "in the next year". `findNextGathering` scans a year and declines on any day
+            nobody has spoken for, and the fortnight below is the only thing that writes days — so
+            days fifteen onward are unsaid by construction, for everybody, always. Reporting a year
+            of certainty from two weeks of data was the largest false sentence in the app, and it
+            said "free", which is the reading of AROUND the model specifically forbids.
+          */
           <p className="font-copy text-base leading-relaxed text-muted-foreground">
-            Nobody&rsquo;s free on the same day in the next year.{" "}
-            <Link href="/home/around" className="underline underline-offset-4">
-              Change that
-            </Link>
-            .
+            No day in the next two weeks works for everyone.
           </p>
         )}
       </Section>
@@ -221,89 +228,58 @@ function Gathering({
 }
 
 /**
- * The next fortnight, as a grid. The board's resting state — glanced at, not read.
+ * The next fortnight — the board's resting state, and now the only place presence is written.
  *
- * This replaced a list of five names and five places, which answered "where is everyone right
- * now" and answered it "not recorded" almost every time. Fourteen columns answer the question the
- * family actually has: where the week overlaps, who has run out of days, which weekend is already
- * spoken for.
+ * It replaced a list of five names and five places, which answered "where is everyone right now"
+ * and answered it "not recorded" almost every time. Fourteen columns answer the question the
+ * family actually has: where the week overlaps, who has run out of days, which weekend is spoken
+ * for.
  *
- * A filled cell is around, an outlined one is away, and an *empty* one is unsaid — a gap in the
- * paper rather than a third kind of mark. That distinction is the whole reason the countdown can
- * be trusted, so it has to survive being drawn small.
+ * A filled circle is here, an outlined one is away, and an *empty dashed* one is unsaid — a gap in
+ * the paper rather than a third kind of mark. That distinction is the whole reason the countdown
+ * can be trusted, so it has to survive being drawn small.
+ *
+ * The editing lives in `Fortnight`, a client component, because the write path needs a mode and an
+ * optimistic paint. Which rows may be written is decided here, on the server, from the same
+ * `canEditProfile` every other write path uses.
  */
-function Grid({ board }: { board: Board }) {
+function TheFortnight({
+  board,
+  user,
+}: {
+  board: Board;
+  user: { id: string; profileId: string | null; role: FamilyRole | null };
+}) {
   if (board.grid.length === 0) {
     return (
       <Section title="The next two weeks">
         <p className="font-copy text-base text-muted-foreground">
-          No one has a profile yet. Run <code>pnpm db:seed</code>.
+          Nobody&rsquo;s set up yet.
         </p>
       </Section>
     );
   }
 
+  const actor =
+    user.profileId && user.role
+      ? { id: user.id, profileId: user.profileId, role: user.role }
+      : null;
+
+  const rows: FortnightRow[] = board.grid.map((row) => ({
+    profileId: row.member.profileId,
+    name: row.member.name,
+    cells: row.days,
+    horizon: row.horizon,
+    editable: actor ? canEditProfile(actor, row.member.profileId) : false,
+  }));
+
   return (
     <Section title="The next two weeks">
-      <table className="w-full border-separate border-spacing-0">
-        <thead>
-          <tr>
-            <th className="w-px" aria-label="Person" />
-            {board.gridDays.map((day) => (
-              <th
-                key={day}
-                scope="col"
-                className="pb-2 text-center text-[0.5625rem] uppercase tracking-wider font-medium text-muted-foreground tabular-nums"
-              >
-                <span className="block">
-                  {formatCalendarDate(day, "EEEEE")}
-                </span>
-                <span className="block opacity-70">
-                  {formatCalendarDate(day, "d")}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {board.grid.map((row) => (
-            <tr key={row.member.profileId}>
-              <th
-                scope="row"
-                className="border-t border-border py-2 pr-3 text-left font-normal"
-              >
-                <span className="flex items-center gap-2">
-                  <PersonBadge name={row.member.name} size={24} />
-                  <span className="font-copy text-sm">
-                    {row.member.name.split(" ")[0]}
-                  </span>
-                </span>
-              </th>
-              {row.days.map((state, index) => (
-                <td
-                  key={board.gridDays[index]}
-                  className="border-t border-border px-0.5 py-2"
-                >
-                  <span
-                    // `title` rather than a legend: five people learn three marks once, and a
-                    // legend is furniture that stays on the page forever to be read never.
-                    title={`${row.member.name.split(" ")[0]} — ${formatCalendarDate(board.gridDays[index], "EEE d MMM")}: ${state === "AROUND" ? "around" : state === "AWAY" ? "away" : "not said"}`}
-                    className={cn(
-                      // Circles, matching the faces above and the strip on the Around tab. A
-                      // fortnight of squares read as a chart; a fortnight of discs reads as
-                      // people.
-                      "mx-auto block aspect-square w-full max-w-5 rounded-full border",
-                      state === "AROUND" && "border-foreground bg-foreground",
-                      state === "AWAY" && "border-foreground",
-                      state === null && "border-dashed border-border",
-                    )}
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Fortnight
+        days={board.gridDays}
+        rows={rows}
+        viewerProfileId={user.profileId ?? ""}
+      />
     </Section>
   );
 }

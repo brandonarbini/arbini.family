@@ -94,12 +94,45 @@ export interface GatheringDto {
  * Null is *unsaid*, and is drawn as a gap rather than as a third state. It is the absence of a
  * statement, not a statement of absence.
  */
+/** One day in the fortnight, for one person. */
+export interface GridCellDto {
+  /** Null is *unsaid*, drawn as a gap rather than as a third kind of mark. */
+  state: PresenceStateDto | null;
+  /**
+   * The run's note, carried per cell rather than per person.
+   *
+   * The board only draws the one covering today, so this looks redundant — it is here for undo.
+   * Painting over a day deletes the statement that was there, note and all, and an undo that
+   * restored the state but dropped the reason would lose the only writing anybody does.
+   */
+  note: string | null;
+}
+
+/**
+ * How far ahead somebody has spoken, counting from today.
+ *
+ * Three cases rather than a date that is sometimes missing, because "said nothing" and "said, with
+ * no end date" are opposite facts and a nullable date cannot tell them apart.
+ */
+export type HorizonDto =
+  | { kind: "unsaid" }
+  | { kind: "through"; date: CalendarDateString }
+  | { kind: "open" };
+
 export interface GridRowDto {
   profileId: string;
   name: string;
   /** Where to fetch this person's avatar — see the note at the foot of this file. */
   avatarPath?: string;
-  days: (PresenceStateDto | null)[];
+  days: GridCellDto[];
+  horizon: HorizonDto;
+  /**
+   * Whether the viewer may say things on this person's behalf.
+   *
+   * Decided by the server from `canEditProfile`, not re-derived from roles by each client: a row a
+   * client offered to edit and the server then refused is worse than one it never offered.
+   */
+  editable: boolean;
 }
 
 /**
@@ -204,61 +237,6 @@ export interface ApiErrorBody {
 }
 
 // --- Presence ----------------------------------------------------------------
-
-/** One recorded run: a stretch of days, and whether the person will be with the family. */
-export interface PresenceRunDto {
-  id: string;
-  profileId: string;
-  state: PresenceStateDto;
-  startsOn: CalendarDateString;
-  /** The last day the run holds. Null means open-ended — "until I say otherwise". */
-  endsOn: CalendarDateString | null;
-  note: string | null;
-}
-
-/**
- * How far ahead somebody has said anything, counting from today.
- *
- * Three cases rather than a date that is sometimes missing, because "said nothing" and "said,
- * with no end date" are opposite facts and a nullable date cannot tell them apart. `open` is the
- * most complete answer there is; `unsaid` is the absence of one.
- */
-export type HorizonDto =
-  | { kind: "unsaid" }
-  | { kind: "through"; date: CalendarDateString }
-  | { kind: "open" };
-
-/** One person's strip: what they have said, and how far ahead they have said it. */
-export interface StripDto {
-  profileId: string;
-  name: string;
-  /** Where to fetch this person's avatar — see the note at the foot of this file. */
-  avatarPath?: string;
-  runs: PresenceRunDto[];
-  horizon: HorizonDto;
-}
-
-/**
- * Everything the "Around" screen needs.
- *
- * `strips` holds only the people the viewer may edit — themselves, or everyone if they are a
- * parent — because the screen exists to change things, and offering a strip that would be refused
- * is an invitation to be refused. The server decides this; the client does not filter.
- */
-export interface AroundDto {
-  today: CalendarDateString;
-  /** The last day the strip draws. A strip's horizon is worth reading against this. */
-  through: CalendarDateString;
-  /**
-   * Which of the strips belongs to whoever asked.
-   *
-   * Sent because the copy changes: your own strip says "I'll be there" and everybody else's says
-   * "Macy will". A parent filling in for a kid in the first person is the kind of small wrongness
-   * that makes somebody wonder whose calendar they are actually editing.
-   */
-  viewerProfileId: string;
-  strips: StripDto[];
-}
 
 /**
  * The body of `PUT /api/v1/presence`.

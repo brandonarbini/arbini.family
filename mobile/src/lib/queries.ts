@@ -1,5 +1,4 @@
 import type {
-  AroundDto,
   BoardDto,
   MeDto,
   PasskeyDto,
@@ -15,15 +14,12 @@ import { authClient } from '@/lib/auth-client';
 /**
  * Query keys, in one place.
  *
- * One key per endpoint, mirroring the server's cache tags. `BOARD_TAGS.presence` invalidates both
- * `/home` and `/home/around` on the server; here, painting a run invalidates both `board` and
- * `around` for the same reason. The symmetry is deliberate — it is the same idea expressed on
- * both sides of the wire, and keeping the names aligned is what makes that legible.
+ * One key per endpoint, mirroring the server's cache tags.
  */
 export const queryKeys = {
   me: ['me'] as const,
   board: ['board'] as const,
-  around: ['around'] as const,
+
   polls: ['polls'] as const,
   /**
    * Scoped to the account, unlike every key above it. The board is the same board for everyone in
@@ -38,13 +34,6 @@ export function useBoard() {
   return useQuery({
     queryKey: queryKeys.board,
     queryFn: ({ signal }) => apiGet<BoardDto>('/api/v1/board', signal),
-  });
-}
-
-export function useAround() {
-  return useQuery({
-    queryKey: queryKeys.around,
-    queryFn: ({ signal }) => apiGet<AroundDto>('/api/v1/around', signal),
   });
 }
 
@@ -114,16 +103,9 @@ export function useSetPresence() {
   });
 }
 
-/**
- * Saying where you'll be changes the board as well as the strip — the countdown, the grid and the
- * agenda all read the same rows. Invalidating only `around` would leave the board insisting the
- * family is waiting on you a second after you answered.
- */
+/** Saying where you'll be changes the countdown, the grid and the agenda — all of one board. */
 function invalidatePresence(client: ReturnType<typeof useQueryClient>) {
-  return Promise.all([
-    client.invalidateQueries({ queryKey: queryKeys.around }),
-    client.invalidateQueries({ queryKey: queryKeys.board }),
-  ]);
+  return client.invalidateQueries({ queryKey: queryKeys.board });
 }
 
 /**

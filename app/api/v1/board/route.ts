@@ -34,7 +34,7 @@ export async function GET(): Promise<Response> {
       getPollsAwaiting(actor.profileId, today),
     ]);
 
-    return jsonOk(toBoardDto(view, awaiting, actor.id, actor.profileId));
+    return jsonOk(toBoardDto(view, awaiting, actor.id, actor.profileId, actor));
   } catch (error) {
     // The client cannot act on a database failure, and the message would leak shapes it has no
     // business knowing. Log the cause, return the category.

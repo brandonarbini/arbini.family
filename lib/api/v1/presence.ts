@@ -49,7 +49,7 @@ import {
  * where null clears an answer rather than recording a no. Both encode the same idea: the absence
  * of a statement is a state the model has, and the client needs a way back to it.
  *
- * Distinct from the form schema in `app/home/around/validations.ts`, which shapes `FormData`:
+ * Distinct from the form schema in `app/home/validations.ts`, which shapes `FormData`:
  * there, days arrive as repeated fields and the state as `""` for a clear. JSON has real arrays
  * and real nulls, so this schema does no preprocessing — but both are built from the same rules in
  * `lib/presence/input.ts`, which keeps the phone and the web agreeing.

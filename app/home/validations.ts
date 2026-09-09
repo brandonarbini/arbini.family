@@ -6,7 +6,7 @@ import {
 } from "@/lib/presence/input";
 
 /**
- * Input schemas for the Around strip.
+ * Input schemas for saying which days you'll be here.
  *
  * A neutral module — no `"use server"`, no `"use client"` — so the action validates against
  * exactly the schema the form was built from. Two copies of these rules would be free to

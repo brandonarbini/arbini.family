@@ -1,10 +1,17 @@
-import type { AgendaEntryDto, BoardDto } from '@server/api/v1/dto';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import type {
+  AgendaEntryDto,
+  BoardDto,
+  GridCellDto,
+  GridRowDto,
+  PresenceStateDto,
+} from '@server/api/v1/dto';
+import { useState } from 'react';
+import { Alert, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, DateStamp, RuledList, Section } from '@/components/section';
-import { Fonts, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import {
@@ -13,8 +20,9 @@ import {
   formatDayOfMonth,
   formatLongDay,
   formatWeekdayInitial,
+  formatWeekdayShort,
 } from '@/lib/dates';
-import { useBoard } from '@/lib/queries';
+import { useBoard, useSetPresence } from '@/lib/queries';
 
 /**
  * The board, in the same order the web sets it: what is being asked of you, then the lede, then
@@ -34,7 +42,7 @@ export default function BoardScreen() {
       <YourTurn board={data} />
       <Today board={data} />
       <Gathering board={data} />
-      <Grid board={data} />
+      <Fortnight board={data} />
       <Agenda board={data} />
     </Page>
   );
@@ -183,11 +191,16 @@ function Gathering({ board }: { board: BoardDto }) {
               )}
             </Text>
             <Copy muted style={styles.ledeSub}>
-              Say which days you’ll be around and the countdown starts.
+              Say your days below.
             </Copy>
           </>
         ) : (
-          <Copy muted>Nobody’s free on the same day in the next year.</Copy>
+          /*
+            Never "in the next year". The gathering scan covers a year and declines on any day
+            nobody has spoken for, while the fortnight below is the only thing that writes days —
+            so days fifteen onward are unsaid by construction, always.
+          */
+          <Copy muted>No day in the next two weeks works for everyone.</Copy>
         )}
       </Section>
     );
@@ -236,14 +249,90 @@ function joinNames(names: string[]): string {
  * paper rather than a third kind of mark. That distinction is the whole reason the countdown can
  * be trusted, so it has to survive being drawn small.
  */
-function Grid({ board }: { board: BoardDto }) {
+/**
+ * The next fortnight — the board's resting state, and now the only place presence is written.
+ *
+ * The grid is the overview; the strip below it is the editor, and picking a row moves the editor
+ * to that person. This replaced a whole second tab that drew the same fourteen days again in the
+ * same three marks — one screen was a photograph of the other, and saying "I'm around this
+ * weekend" began with a tab change and a scroll past four other people's calendars.
+ *
+ * The strip exists rather than making the grid cells themselves tappable because of the thumb:
+ * fourteen columns on a phone is about twenty points per column, which cannot be hit reliably. The
+ * grid stays a picture; the thing you touch is drawn at the size of a finger.
+ */
+function Fortnight({ board }: { board: BoardDto }) {
   const theme = useTheme();
+  const setPresence = useSetPresence();
+  const editable = board.grid.filter((row) => row.editable);
+
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () =>
+      editable.find((row) => row.profileId === board.viewerProfileId)?.profileId ??
+      editable[0]?.profileId ??
+      null,
+  );
+  const [mode, setMode] = useState<PresenceStateDto | null>('AROUND');
+  const [note, setNote] = useState('');
+  const [stroke, setStroke] = useState<{
+    profileId: string;
+    date: string;
+    was: GridCellDto;
+    now: PresenceStateDto | null;
+  } | null>(null);
 
   if (board.grid.length === 0) {
     return (
       <Section title="The next two weeks">
-        <Copy muted>No one has a profile yet.</Copy>
+        <Copy muted>Nobody’s set up yet.</Copy>
       </Section>
+    );
+  }
+
+  const selected = board.grid.find((row) => row.profileId === selectedId) ?? null;
+  const isSelf = selected?.profileId === board.viewerProfileId;
+
+  /**
+   * A tap is the whole act.
+   *
+   * There used to be a select-then-save step, and it was the worst thing in the app: a staged day
+   * was painted in the state you were about to set, so a tapped day and a day you had actually
+   * told your family about differed by a two-point border. Walking away without saving looked
+   * exactly like having saved.
+   */
+  function paint(row: GridRowDto, index: number) {
+    if (!row.editable || setPresence.isPending) return;
+    const date = board.gridDays[index];
+    const was = row.days[index];
+    // Tapping a day that already says what the brush says takes it back, so the same gesture
+    // undoes itself and nobody has to find a third control to clear one day.
+    const now = was.state === mode ? null : mode;
+    setStroke({ profileId: row.profileId, date, was, now });
+    write(row.profileId, date, now, note);
+  }
+
+  function write(
+    profileId: string,
+    date: string,
+    state: PresenceStateDto | null,
+    withNote: string,
+  ) {
+    setPresence.mutate(
+      {
+        profileId,
+        state,
+        days: [date],
+        note: state === null || !withNote.trim() ? null : withNote.trim(),
+      },
+      {
+        onError: (cause) => {
+          setStroke(null);
+          Alert.alert(
+            'That didn’t save',
+            cause instanceof ApiError ? cause.message : 'It may be the network. Try again.',
+          );
+        },
+      },
     );
   }
 
@@ -263,34 +352,237 @@ function Grid({ board }: { board: BoardDto }) {
         ))}
       </View>
 
-      {board.grid.map((row) => (
-        <View key={row.profileId} style={[styles.gridRow, { borderTopColor: theme.border }]}>
-          <View style={styles.gridLabel}>
-            <PersonBadge profileId={row.profileId} avatarPath={row.avatarPath} size={22} />
-            {/* One line, always. A wrapped "Brandon" pushes its own row taller than the
-                others and the fortnight stops reading as a grid. */}
-            <Copy style={styles.gridName} numberOfLines={1}>
-              {row.name.split(' ')[0]}
-            </Copy>
-          </View>
-          {row.days.map((state, index) => (
-            <View key={board.gridDays[index]} style={styles.gridCellWrap}>
-              <View
-                style={[
-                  styles.gridCell,
-                  {
-                    borderColor: state === null ? theme.border : theme.text,
-                    backgroundColor: state === 'AROUND' ? theme.text : 'transparent',
-                    borderStyle: state === null ? 'dashed' : 'solid',
-                  },
-                ]}
-              />
+      {board.grid.map((row) => {
+        const picked = row.profileId === selectedId;
+        return (
+          <Pressable
+            key={row.profileId}
+            onPress={row.editable ? () => setSelectedId(row.profileId) : undefined}
+            accessibilityRole={row.editable ? 'button' : undefined}
+            accessibilityState={row.editable ? { selected: picked } : undefined}
+            style={[
+              styles.gridRow,
+              {
+                borderTopColor: theme.border,
+                backgroundColor: picked ? theme.backgroundSelected : 'transparent',
+              },
+            ]}
+          >
+            <View style={styles.gridLabel}>
+              <PersonBadge profileId={row.profileId} avatarPath={row.avatarPath} size={22} />
+              {/* One line, always. A wrapped "Brandon" pushes its own row taller than the others
+                  and the fortnight stops reading as a grid. */}
+              <Copy style={styles.gridName} numberOfLines={1}>
+                {row.name.split(' ')[0]}
+              </Copy>
             </View>
-          ))}
+            {row.days.map((cell, index) => (
+              <View key={board.gridDays[index]} style={styles.gridCellWrap}>
+                <View
+                  style={[
+                    styles.gridCell,
+                    {
+                      borderColor: cell.state === null ? theme.border : theme.text,
+                      backgroundColor: cell.state === 'AROUND' ? theme.text : 'transparent',
+                      borderStyle: cell.state === null ? 'dashed' : 'solid',
+                    },
+                  ]}
+                />
+              </View>
+            ))}
+          </Pressable>
+        );
+      })}
+
+      {selected ? (
+        <View style={[styles.editor, { borderTopColor: theme.border }]}>
+          <Copy muted style={styles.editorHint}>
+            {isSelf
+              ? 'Tap a day to say you’ll be here. Tap it again to take it back.'
+              : `You’re saying this for ${selected.name.split(' ')[0]}.`}
+          </Copy>
+          <Copy muted style={styles.editorHint}>
+            {describeHorizon(selected.horizon, isSelf, selected.name.split(' ')[0])}
+          </Copy>
+
+          <Brush mode={mode} onMode={setMode} self={isSelf} name={selected.name.split(' ')[0]} />
+
+          <View style={styles.strip}>
+            {board.gridDays.map((day, index) => (
+              <BigCell
+                key={day}
+                day={day}
+                cell={selected.days[index]}
+                onPress={() => paint(selected, index)}
+              />
+            ))}
+          </View>
+
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            maxLength={200}
+            placeholder="Add a note"
+            placeholderTextColor={theme.textSecondary + '80'}
+            style={[styles.note, { color: theme.text, borderColor: theme.border }]}
+          />
+
+          {/*
+            The undo is the whole safety net now that a tap writes. It carries what the day said
+            before — note and all — because painting over a day deletes the only writing anybody
+            does in this app.
+          */}
+          {stroke ? (
+            <View style={styles.undo}>
+              <Copy muted style={styles.undoText}>
+                {describeStroke(stroke.date, stroke.now)}
+              </Copy>
+              <Text
+                onPress={() => {
+                  write(stroke.profileId, stroke.date, stroke.was.state, stroke.was.note ?? '');
+                  setStroke(null);
+                }}
+                style={[styles.undoAction, { color: theme.primary }]}
+              >
+                Undo
+              </Text>
+            </View>
+          ) : null}
         </View>
-      ))}
+      ) : null}
     </Section>
   );
+}
+
+/**
+ * The brush: what a tap means.
+ *
+ * A persistent mode rather than a cycle-on-tap, because three states across fourteen cells is what
+ * a mode is for. What is gone is the *deferred* part: the mode says what the next tap does, and
+ * the tap does it.
+ */
+function Brush({
+  mode,
+  onMode,
+  self,
+  name,
+}: {
+  mode: PresenceStateDto | null;
+  onMode: (next: PresenceStateDto | null) => void;
+  self: boolean;
+  name: string;
+}) {
+  const theme = useTheme();
+  const options: { setting: PresenceStateDto | null; label: string }[] = [
+    { setting: 'AROUND', label: self ? 'I’ll be here' : `${name} will` },
+    { setting: 'AWAY', label: self ? 'I won’t' : `${name} won’t` },
+    { setting: null, label: self ? 'Nothing said' : `${name} hasn’t said` },
+  ];
+
+  return (
+    <View style={styles.brush} accessibilityRole="radiogroup">
+      {options.map((option) => {
+        const on = option.setting === mode;
+        return (
+          <Pressable
+            key={option.label}
+            onPress={() => onMode(option.setting)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: on }}
+            style={({ pressed }) => [
+              styles.brushOption,
+              {
+                borderColor: on ? theme.text : theme.border,
+                backgroundColor: on ? theme.text : 'transparent',
+                opacity: pressed ? 0.6 : 1,
+              },
+            ]}
+          >
+            {/* The same three marks the calendar uses, so the brush reads as a key to it. */}
+            <View
+              style={[
+                styles.swatch,
+                {
+                  borderColor: on ? theme.background : theme.text,
+                  borderStyle: option.setting === null ? 'dashed' : 'solid',
+                  backgroundColor:
+                    option.setting === 'AROUND'
+                      ? on
+                        ? theme.background
+                        : theme.text
+                      : 'transparent',
+                },
+              ]}
+            />
+            <Text
+              style={[styles.brushLabel, { color: on ? theme.background : theme.textSecondary }]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** One day, at the size of a finger. */
+function BigCell({ day, cell, onPress }: { day: string; cell: GridCellDto; onPress: () => void }) {
+  const theme = useTheme();
+  const filled = cell.state === 'AROUND';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${formatLongDay(day)} — ${describeState(cell.state)}`}
+      style={({ pressed }) => [styles.bigCellWrap, { opacity: pressed ? 0.6 : 1 }]}
+    >
+      <Text style={[styles.bigCellWeekday, { color: theme.textSecondary }]}>
+        {formatWeekdayInitial(day)}
+      </Text>
+      <View
+        style={[
+          styles.bigCell,
+          {
+            borderColor: cell.state === null ? theme.border : theme.text,
+            borderStyle: cell.state === null ? 'dashed' : 'solid',
+            backgroundColor: filled ? theme.text : 'transparent',
+          },
+        ]}
+      >
+        <Text style={[styles.bigCellDay, { color: filled ? theme.background : theme.text }]}>
+          {formatDayOfMonth(day)}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * How far ahead this person has spoken. Names the day rather than counting them: "said through
+ * Sunday" is a fact you can check against your own week.
+ */
+function describeHorizon(horizon: GridRowDto['horizon'], self: boolean, name: string): string {
+  const who = self ? 'You’ve' : `${name} has`;
+  switch (horizon.kind) {
+    case 'open':
+      return `${who} said, until further notice.`;
+    case 'unsaid':
+      return `${self ? 'You haven’t' : `${name} hasn’t`} said anything about today yet.`;
+    case 'through':
+      return `${who} said through ${formatLongDay(horizon.date)}.`;
+  }
+}
+
+/** One vocabulary for the three states, everywhere. */
+function describeState(state: PresenceStateDto | null): string {
+  return state === 'AROUND' ? 'here' : state === 'AWAY' ? 'away' : 'nothing said';
+}
+
+function describeStroke(date: string, now: PresenceStateDto | null): string {
+  const day = formatWeekdayShort(date);
+  return now === null ? `${day} taken back.` : `${day} set to ${describeState(now)}.`;
 }
 
 /**
@@ -401,6 +693,88 @@ const styles = StyleSheet.create({
     height: 16,
     borderWidth: 1,
     borderRadius: 8,
+  },
+  editor: {
+    marginTop: Spacing.four,
+    paddingTop: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.three,
+  },
+  editorHint: {
+    fontSize: 15,
+  },
+  brush: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  brushOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Radius,
+    paddingHorizontal: Spacing.two + Spacing.half,
+    paddingVertical: Spacing.two,
+  },
+  swatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  brushLabel: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+  },
+  strip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  // Exactly a seventh of the row, so a column is a weekday and a fortnight is two clean rows.
+  bigCellWrap: {
+    width: `${100 / 7}%`,
+    alignItems: 'center',
+    paddingVertical: Spacing.one,
+  },
+  bigCellWeekday: {
+    fontFamily: Fonts.sans,
+    fontSize: 9,
+    letterSpacing: 1,
+    marginBottom: Spacing.half,
+  },
+  bigCell: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bigCellDay: {
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
+  },
+  note: {
+    fontFamily: Fonts.serif,
+    fontSize: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + Spacing.half,
+  },
+  undo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  undoText: {
+    fontSize: 14,
+  },
+  undoAction: {
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   todayRow: {
     flexDirection: 'row',

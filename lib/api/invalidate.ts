@@ -6,7 +6,7 @@ import { BOARD_TAGS } from "@/lib/board/cache";
 /**
  * Cache invalidation for the API routes.
  *
- * The Server Actions in `app/home/around/actions.ts` use `updateTag`, which gives read-your-own-
+ * The Server Actions in `app/home/actions.ts` use `updateTag`, which gives read-your-own-
  * writes: the very next render sees the change. That is not available here — Next's documentation
  * is explicit that `updateTag` "can **only** be called from within Server Actions. It cannot be
  * used in Route Handlers." So these use `revalidateTag`.

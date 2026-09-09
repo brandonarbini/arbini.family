@@ -1,8 +1,8 @@
 /**
  * Cache tags for the board.
  *
- * Shared rather than route-private because both `/home` and `/home/around` read these, and
- * `/home/around`'s actions invalidate them — the moment a tag is touched from outside the
+ * Shared rather than route-private because both the board and its editor read these,
+ * and the board's actions invalidate them — the moment a tag is touched from outside the
  * directory that reads it, it belongs here.
  *
  * Constants, never string literals at the call site: a typo in an invalidation string is silent,
