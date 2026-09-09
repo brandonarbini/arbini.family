@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
  * minute gets used once — so the common case is a title and a few taps on a strip of days, with
  * no date pickers, no time fields and no deadline to think about.
  *
- * Days are single-day options (`startsOn === endsOn`, matching `Stay`'s inclusive convention).
+ * Days are single-day options (`startsOn === endsOn`, matching `Presence`'s inclusive convention).
  * The range inputs underneath cover the rare holiday-week case with the same shape, and stay
  * folded away so they cost nothing to ignore.
  */
@@ -38,15 +38,11 @@ const MIN_STRIP_DAYS = 14;
 
 export function PollForm({
   today,
-  places,
   defaultTitle,
-  defaultPlaceId,
   defaultOptions,
 }: {
   today: string;
-  places: { id: string; name: string; isHome: boolean }[];
   defaultTitle?: string;
-  defaultPlaceId?: string | null;
   /** Pre-selected options, used by "Ask again" to shift last week's poll forward intact. */
   defaultOptions?: { startsOn: string; endsOn: string }[];
 }) {
@@ -95,32 +91,6 @@ export function PollForm({
         />
         <FieldError message={fieldError(state, "title")} />
       </div>
-
-      {/*
-        Optional, and last in the tab order before the days, because the answer is "home" almost
-        every time. It exists because settling writes a stay, and a stay needs somewhere to be —
-        a "Beach day?" poll that quietly recorded everyone at home would be worse than useless.
-      */}
-      {places.length > 1 ? (
-        <div>
-          <Label htmlFor="placeId">Where?</Label>
-          <select
-            id="placeId"
-            name="placeId"
-            defaultValue={defaultPlaceId ?? ""}
-            className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Home</option>
-            {places
-              .filter((place) => !place.isHome)
-              .map((place) => (
-                <option key={place.id} value={place.id}>
-                  {place.name}
-                </option>
-              ))}
-          </select>
-        </div>
-      ) : null}
 
       <div>
         <span className="text-sm font-medium">Which days?</span>

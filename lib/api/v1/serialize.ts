@@ -2,29 +2,23 @@ import "server-only";
 
 import type {
   AgendaEntryDto,
+  AroundDto,
   AwaitingPollDto,
   BoardDto,
-  CalendarDateString,
   GatheringDto,
+  GridRowDto,
   MeDto,
   PasskeyDto,
-  PlaceDto,
   PollDto,
   PollOptionDto,
   PresenceDto,
+  PresenceRunDto,
   ReplyKindDto,
-  StayDto,
-  WhereDto,
 } from "@/lib/api/v1/dto";
-import type {
-  BoardPoll,
-  BoardStay,
-  FamilyMember,
-  Place,
-} from "@/lib/board/data";
+import type { BoardPoll, BoardPresence, FamilyMember } from "@/lib/board/data";
 import { avatarPath } from "@/lib/avatars/path";
 import { tallyPoll } from "@/lib/polls/tally";
-import type { EditorData } from "@/lib/board/editor";
+import type { StripData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
 import { AGENDA_WINDOW_DAYS } from "@/lib/board/view";
@@ -44,12 +38,6 @@ import type { PasskeySummary } from "@/lib/passkeys/data";
  * would quietly turn it into a string while the type still claimed otherwise.
  */
 
-function toPlaceDto(place: Place): PlaceDto {
-  // Deliberately not the whole row: `address` is on the board's Place and nothing on the phone
-  // shows it. Sending it anyway would make it a promise.
-  return { id: place.id, name: place.name, isHome: place.isHome };
-}
-
 export function toMeDto(actor: ProfileActor): MeDto {
   return {
     profileId: actor.profileId,
@@ -64,8 +52,9 @@ function toPresenceDto(row: BoardView["presence"][number]): PresenceDto {
     profileId: row.member.profileId,
     name: row.member.name,
     avatarPath: avatarPath(row.member.profileId, row.member.name),
-    place: row.place ? toPlaceDto(row.place) : null,
+    state: row.state,
     until: row.until,
+    note: row.note,
   };
 }
 
@@ -73,10 +62,15 @@ function toGatheringDto(
   gathering: BoardView["gathering"],
 ): GatheringDto | null {
   if (!gathering) return null;
+  return { date: gathering.date, inDays: gathering.inDays };
+}
+
+function toGridRowDto(row: BoardView["grid"][number]): GridRowDto {
   return {
-    date: gathering.date,
-    place: toPlaceDto(gathering.place),
-    inDays: gathering.inDays,
+    profileId: row.member.profileId,
+    name: row.member.name,
+    avatarPath: avatarPath(row.member.profileId, row.member.name),
+    days: row.days,
   };
 }
 
@@ -90,7 +84,6 @@ function toGatheringDto(
 function toAgendaDto(
   entries: AgendaEntry[],
   membersByProfileId: BoardView["membersByProfileId"],
-  placesById: BoardView["placesById"],
 ): AgendaEntryDto[] {
   return entries.map((entry) => {
     if (entry.kind === "event") {
@@ -108,22 +101,12 @@ function toAgendaDto(
     // not knowing.
     const personName = membersByProfileId[entry.profileId]?.name ?? "Someone";
 
-    if (entry.kind === "birthday") {
-      return {
-        kind: "birthday",
-        date: entry.date,
-        profileId: entry.profileId,
-        personName,
-        turning: entry.turning,
-      };
-    }
-
     return {
-      kind: entry.kind,
+      kind: "birthday",
       date: entry.date,
       profileId: entry.profileId,
       personName,
-      placeName: placesById[entry.placeId]?.name ?? "somewhere",
+      turning: entry.turning,
     };
   });
 }
@@ -157,52 +140,53 @@ export function toBoardDto(
     today: view.today,
     awaiting: toAwaitingDto(awaiting, viewerUserId),
     gathering: toGatheringDto(view.gathering),
+    // Names rather than ids, for the same reason the agenda resolves its own: the sentence the
+    // client renders is "Waiting on Macy and Tanner", and shipping the roster so every client can
+    // perform that join is work done twice to reach one answer.
+    unsaidNames: view.unsaidToday.map((member) => member.name),
     presence: view.presence.map(toPresenceDto),
-    agenda: toAgendaDto(view.agenda, view.membersByProfileId, view.placesById),
+    gridDays: view.gridDays,
+    grid: view.grid.map(toGridRowDto),
+    agenda: toAgendaDto(view.agenda, view.membersByProfileId),
     agendaWindowDays: AGENDA_WINDOW_DAYS,
   };
 }
 
-// --- Stays -------------------------------------------------------------------
+// --- Presence ----------------------------------------------------------------
 
 /**
- * The stay editor's data.
+ * The Around screen's data.
  *
- * `lists` carries only the people the viewer may edit — `getEditorData` has already narrowed that
- * from the actor's role. The client does not filter: a row it cannot change is a row it should
+ * `strips` carries only the people the viewer may edit — `getStripData` has already narrowed that
+ * from the actor's role. The client does not filter: a strip it cannot change is a strip it should
  * never have been shown, and deciding that here means one answer rather than one per client.
  */
-export function toWhereDto(
-  today: CalendarDateString,
-  data: EditorData,
-): WhereDto {
-  const placesById = new Map(data.places.map((place) => [place.id, place]));
-
+export function toAroundDto(
+  data: StripData,
+  viewerProfileId: string,
+): AroundDto {
   return {
-    today,
-    places: data.places.map(toPlaceDto),
-    lists: data.stayLists.map((list) => ({
-      profileId: list.member.profileId,
-      name: list.member.name,
-      avatarPath: avatarPath(list.member.profileId, list.member.name),
-      stays: list.stays.flatMap((stay) => {
-        const place = placesById.get(stay.placeId);
-        // A stay whose place has been deleted cannot be rendered or safely edited, and sending it
-        // with a null place would push that decision onto every client.
-        return place ? [toStayDto(stay, place)] : [];
-      }),
+    today: data.today,
+    through: data.through,
+    viewerProfileId,
+    strips: data.strips.map((strip) => ({
+      profileId: strip.member.profileId,
+      name: strip.member.name,
+      avatarPath: avatarPath(strip.member.profileId, strip.member.name),
+      runs: strip.runs.map(toPresenceRunDto),
+      horizon: strip.horizon,
     })),
   };
 }
 
-function toStayDto(stay: BoardStay, place: Place): StayDto {
+function toPresenceRunDto(run: BoardPresence): PresenceRunDto {
   return {
-    id: stay.id,
-    profileId: stay.profileId,
-    place: toPlaceDto(place),
-    startsOn: stay.startsOn,
-    endsOn: stay.endsOn,
-    note: stay.note,
+    id: run.id,
+    profileId: run.profileId,
+    state: run.state,
+    startsOn: run.startsOn,
+    endsOn: run.endsOn,
+    note: run.note,
   };
 }
 
@@ -264,7 +248,6 @@ export function toPollDto(
     id: poll.id,
     title: poll.title,
     status: poll.status,
-    placeName: poll.placeName,
     // Null when the viewer asked it — being told "Brandon is waiting on you" when you are Brandon
     // reads as a bug, so the decision is made here rather than left to each client to remember.
     askedByName: poll.createdById === viewerUserId ? null : poll.createdByName,

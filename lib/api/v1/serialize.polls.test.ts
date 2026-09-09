@@ -41,8 +41,6 @@ function poll(replies: { profileId: string; kind: ReplyKind }[]): BoardPoll {
     id: "poll-1",
     title: "A weekend",
     status: PollStatus.OPEN,
-    placeId: null,
-    placeName: null,
     settledOptionId: null,
     createdById: "u-p-brandon",
     createdByName: "Brandon Arbini",

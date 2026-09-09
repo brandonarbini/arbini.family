@@ -16,14 +16,18 @@
  *    whatever the database happened to look like. `lib/api/v1/serialize.ts` is where the two meet,
  *    and it is the place a breaking change becomes visible instead of silent.
  *
- * Anything added here is a promise to a binary you no longer control. Add optional fields; do not
- * repurpose existing ones.
+ * **Additive only from the first App Store release.** Until then this file has been rewritten
+ * outright once — retiring places and stays for presence — because every install was an internal
+ * build and the audience was a text message. That was the last cheap moment, and it is worth
+ * naming rather than leaving the rule looking absolute and then quietly broken: after the first
+ * public release, add optional fields and do not repurpose existing ones, because there will be
+ * somebody on last month's build and no way to reach them.
  */
 
 /**
  * A calendar date as `YYYY-MM-DD`.
  *
- * The board is date-based, never instant-based: a stay covers days, not moments. The web brands
+ * The board is date-based, never instant-based: a run covers days, not moments. The web brands
  * this type in `lib/dates.ts`; here it is a plain string because this file cannot import that
  * brand — the shape on the wire is identical either way.
  *
@@ -34,12 +38,6 @@ export type CalendarDateString = string;
 
 /** Mirrors the `FamilyRole` enum in schema.prisma. */
 export type FamilyRoleDto = "PARENT" | "KID";
-
-export interface PlaceDto {
-  id: string;
-  name: string;
-  isHome: boolean;
-}
 
 export interface MemberDto {
   profileId: string;
@@ -57,28 +55,60 @@ export interface MeDto {
   role: FamilyRoleDto;
 }
 
-/** Where one person is today. */
+/**
+ * Whether somebody will be with the family, on a stretch of days.
+ *
+ * AROUND means "I'll be there" — not "at home", and not "free". The whole gathering countdown
+ * rests on that reading; see the enum comment in `schema.prisma`.
+ */
+export type PresenceStateDto = "AROUND" | "AWAY";
+
+/** Where one person stands today. */
 export interface PresenceDto {
   profileId: string;
   name: string;
-  /** Null means nothing is recorded — which is not the same as being at home. */
-  place: PlaceDto | null;
-  /** Last day at that place; null for an open-ended stay, or when nothing is recorded. */
+  /** Null means nothing has been said about today — which is not the same as being away. */
+  state: PresenceStateDto | null;
+  /** Last day the current run holds; null when it is open-ended, or when nothing is said. */
   until: CalendarDateString | null;
+  /** The run's own note — "Vanguard", "work trip" — when it carries one. */
+  note: string | null;
   /** Where to fetch this person's avatar — see the note at the foot of this file. */
   avatarPath?: string;
 }
 
-/** The next day everyone is in the same place. */
+/** The next day everybody is around. */
 export interface GatheringDto {
   date: CalendarDateString;
-  place: PlaceDto;
   /** Zero when it is today. */
   inDays: number;
 }
 
 /**
+ * One person's fortnight, as cells: the board's resting state.
+ *
+ * `days` runs from `BoardDto.today` forward, one entry per day, and its length is
+ * `BoardDto.gridDays.length` — the dates are sent alongside rather than recomputed, so a client
+ * never has to do calendar arithmetic to label a column.
+ *
+ * Null is *unsaid*, and is drawn as a gap rather than as a third state. It is the absence of a
+ * statement, not a statement of absence.
+ */
+export interface GridRowDto {
+  profileId: string;
+  name: string;
+  /** Where to fetch this person's avatar — see the note at the foot of this file. */
+  avatarPath?: string;
+  days: (PresenceStateDto | null)[];
+}
+
+/**
  * One line of the agenda, with ids already resolved to names.
+ *
+ * Birthdays and one-off dates, and nothing else. Arrivals and departures used to be here too, and
+ * that is what made the section unreadable: a weekend everyone is home produced five near-identical
+ * lines saying what `grid` already shows at a glance. What is left is the part the grid cannot
+ * show.
  *
  * Resolving server-side rather than shipping lookup tables: the server holds the data anyway, and
  * the alternative is every client reimplementing the same join. Dates stay as calendar dates
@@ -86,13 +116,6 @@ export interface GatheringDto {
  * but *which day it is* is a fact, and that belongs to the server.
  */
 export type AgendaEntryDto =
-  | {
-      kind: "arrival" | "departure";
-      date: CalendarDateString;
-      profileId: string;
-      personName: string;
-      placeName: string;
-    }
   | {
       kind: "birthday";
       date: CalendarDateString;
@@ -127,7 +150,18 @@ export interface BoardDto {
   today: CalendarDateString;
   awaiting: AwaitingPollDto[];
   gathering: GatheringDto | null;
+  /**
+   * Who the countdown is waiting on: everyone who has said nothing about today.
+   *
+   * `gathering` is null whenever this is non-empty, and that is the point of sending both. The
+   * countdown declines while anybody is unsaid — silence is never a yes — but declining without
+   * saying why is how the board ended up with a headline that never said anything.
+   */
+  unsaidNames: string[];
   presence: PresenceDto[];
+  /** The dates `GridRowDto.days` is indexed by, in order, starting at `today`. */
+  gridDays: CalendarDateString[];
+  grid: GridRowDto[];
   agenda: AgendaEntryDto[];
   /** How many days ahead `agenda` looks, so the client can label the section honestly. */
   agendaWindowDays: number;
@@ -157,47 +191,81 @@ export interface ApiErrorBody {
   };
 }
 
-// --- Stays -------------------------------------------------------------------
+// --- Presence ----------------------------------------------------------------
 
-/** One recorded stay: a person at a place, over a range of days. */
-export interface StayDto {
+/** One recorded run: a stretch of days, and whether the person will be with the family. */
+export interface PresenceRunDto {
   id: string;
   profileId: string;
-  place: PlaceDto;
+  state: PresenceStateDto;
   startsOn: CalendarDateString;
-  /** The last day *at* the place. Null means open-ended — "from then on". */
+  /** The last day the run holds. Null means open-ended — "until I say otherwise". */
   endsOn: CalendarDateString | null;
   note: string | null;
 }
 
-/** One person's stays, as the editor lists them. */
-export interface StayListDto {
+/**
+ * How far ahead somebody has said anything, counting from today.
+ *
+ * Three cases rather than a date that is sometimes missing, because "said nothing" and "said,
+ * with no end date" are opposite facts and a nullable date cannot tell them apart. `open` is the
+ * most complete answer there is; `unsaid` is the absence of one.
+ */
+export type HorizonDto =
+  | { kind: "unsaid" }
+  | { kind: "through"; date: CalendarDateString }
+  | { kind: "open" };
+
+/** One person's strip: what they have said, and how far ahead they have said it. */
+export interface StripDto {
   profileId: string;
   name: string;
   /** Where to fetch this person's avatar — see the note at the foot of this file. */
   avatarPath?: string;
-  stays: StayDto[];
+  runs: PresenceRunDto[];
+  horizon: HorizonDto;
 }
 
 /**
- * Everything the "Where I am" screen needs.
+ * Everything the "Around" screen needs.
  *
- * `lists` holds only the people the viewer may edit — themselves, or everyone if they are a
- * parent — because the screen exists to change things, and listing rows that would be refused is
- * an invitation to be refused. The server decides this; the client does not filter.
+ * `strips` holds only the people the viewer may edit — themselves, or everyone if they are a
+ * parent — because the screen exists to change things, and offering a strip that would be refused
+ * is an invitation to be refused. The server decides this; the client does not filter.
  */
-export interface WhereDto {
+export interface AroundDto {
   today: CalendarDateString;
-  places: PlaceDto[];
-  lists: StayListDto[];
+  /** The last day the strip draws. A strip's horizon is worth reading against this. */
+  through: CalendarDateString;
+  /**
+   * Which of the strips belongs to whoever asked.
+   *
+   * Sent because the copy changes: your own strip says "I'll be there" and everybody else's says
+   * "Macy will". A parent filling in for a kid in the first person is the kind of small wrongness
+   * that makes somebody wonder whose calendar they are actually editing.
+   */
+  viewerProfileId: string;
+  strips: StripDto[];
 }
 
-/** The body of `POST /api/v1/stays` and `PATCH /api/v1/stays/:id`. */
-export interface StayInputDto {
+/**
+ * The body of `PUT /api/v1/presence`.
+ *
+ * `days` is a list rather than a first-and-last pair. The strip is a fortnight of individually
+ * tappable cells, so a selection is often not contiguous — "Friday, Saturday and the Tuesday
+ * after" is one act. The server collapses them into runs when it writes, so the storage stays a
+ * range and a weekend is still one row.
+ *
+ * `state: null` clears the days, returning them to unsaid rather than recording an away — the same
+ * shape as `ReplyInputDto`, where null clears an answer rather than recording a no.
+ *
+ * Open-ended presence ("at school until I say otherwise") has no representation here, and cannot:
+ * a list of days always has a last one. The model holds it and nothing yet writes one.
+ */
+export interface PresenceInputDto {
   profileId: string;
-  placeId: string;
-  startsOn: CalendarDateString;
-  endsOn: CalendarDateString | null;
+  state: PresenceStateDto | null;
+  days: CalendarDateString[];
   note: string | null;
 }
 
@@ -260,8 +328,6 @@ export interface PollDto {
   id: string;
   title: string;
   status: PollStatusDto;
-  /** Where the gathering is. Null means home, resolved when the poll settles. */
-  placeName: string | null;
   /** Who asked, or null when that is the viewer themselves — see `AwaitingPollDto`. */
   askedByName: string | null;
   /** True while any option is still waiting on the viewer. */

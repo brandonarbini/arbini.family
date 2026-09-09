@@ -3,11 +3,9 @@ import "server-only";
 import {
   type BoardPoll,
   type FamilyMember,
-  type Place,
   getFamilyMembers,
-  getPlaces,
   getPoll,
-  getStaysForWindow,
+  getPresenceForWindow,
 } from "@/lib/board/data";
 import {
   type CalendarDate,
@@ -15,7 +13,7 @@ import {
   eachCalendarDay,
 } from "@/lib/dates";
 import { type OptionTally, rankOptions, tallyPoll } from "@/lib/polls/tally";
-import { locationsOn } from "@/lib/presence";
+import { statesOn } from "@/lib/presence/derive";
 
 /**
  * One poll, assembled for the ballot.
@@ -32,23 +30,23 @@ export interface OptionView {
   /** True when this is the option the family landed on. */
   isSettled: boolean;
   /**
-   * People who are somewhere other than *the gathering* for any part of the option, and where.
+   * People who have already said they will be away for some part of the option, and why.
    *
-   * Measured against the poll's own place, not against home. A "Beach day?" poll that reported
-   * everyone as present because they were all at home would be exactly backwards.
+   * Read, never written. Settling used to record everyone's answer as a location, which meant
+   * saying yes to a Thursday quietly asserted where you would be for two days; that is gone. What
+   * survives is the useful half — seeing "Addison's away — Vanguard" at the moment somebody is
+   * choosing a Thursday, so nobody proposes one without knowing.
    *
-   * Built from recorded stays alone, so the line is empty until somebody has said where they will
-   * be. Silence here means nothing is known, not that everyone is free — the tally is what says
-   * who can come, and this only flags the days a recorded stay already contradicts. Derived,
-   * never stored.
+   * Built from what people have said alone, so the line is empty until somebody has said
+   * something. Silence here means nothing is known, not that everyone is free — the tally is what
+   * says who can come, and this only flags the days an existing statement already contradicts.
+   * Derived, never stored.
    */
-  awayNotes: { member: FamilyMember; place: Place }[];
+  awayNotes: { member: FamilyMember; note: string | null }[];
 }
 
 export interface PollView {
   poll: BoardPoll;
-  /** Where the gathering resolves to — the poll's place, or home when it named none. */
-  gatheringPlace: Place | null;
   members: FamilyMember[];
   options: OptionView[];
   /** Best first, so whoever settles it does not have to read the counts. */
@@ -64,17 +62,14 @@ export async function getPollView(
   const poll = await getPoll(pollId);
   if (!poll) return null;
 
-  const [members, places] = await Promise.all([
-    getFamilyMembers(),
-    getPlaces(),
-  ]);
+  const members = await getFamilyMembers();
   const profileIds = members.map((member) => member.profileId);
   const replies = poll.options.flatMap((option) => option.replies);
   const tallies = tallyPoll(poll.options, replies, profileIds);
   const talliesById = new Map(tallies.map((tally) => [tally.optionId, tally]));
 
   // Bounded by the options themselves rather than by a fixed horizon: a poll about Thanksgiving
-  // is months out, and a 30-day window would load none of the stays that cover it.
+  // is months out, and a 30-day window would load none of the runs that cover it.
   const earliest = poll.options.reduce<CalendarDate | null>(
     (min, option) =>
       min === null || option.startsOn < min ? option.startsOn : min,
@@ -85,35 +80,36 @@ export async function getPollView(
       max === null || option.endsOn > max ? option.endsOn : max,
     null,
   );
-  const stays =
+  const rows =
     earliest && latest
-      ? await getStaysForWindow(
+      ? await getPresenceForWindow(
           earliest,
           differenceInCalendarDays(earliest, latest),
         )
       : [];
 
-  const placesById = new Map(places.map((place) => [place.id, place]));
-  // The same fallback `settlePoll` applies, so what the ballot says about who is away and what
-  // settling actually writes cannot disagree.
-  const gatheringPlace =
-    (poll.placeId ? placesById.get(poll.placeId) : undefined) ??
-    places.find((place) => place.isHome) ??
-    null;
   const membersByProfileId = new Map(
     members.map((member) => [member.profileId, member]),
   );
 
   const options: OptionView[] = poll.options.map((option) => {
-    // One entry per person, not per day: "Addison's at Vanguard" reads as context, whereas the
-    // same sentence repeated for each day of a long weekend reads as an error message.
-    const away = new Map<string, Place>();
+    // One entry per person, not per day: "Addison's away" reads as context, whereas the same
+    // sentence repeated for each day of a long weekend reads as an error message.
+    const away = new Map<string, string | null>();
     for (const day of eachCalendarDay(option.startsOn, option.endsOn)) {
-      for (const [profileId, placeId] of locationsOn(stays, profileIds, day)) {
-        if (placeId === null || away.has(profileId)) continue;
-        if (gatheringPlace && placeId === gatheringPlace.id) continue;
-        const place = placesById.get(placeId);
-        if (place) away.set(profileId, place);
+      for (const [profileId, state] of statesOn(rows, profileIds, day)) {
+        // Unsaid is not away. A person who has said nothing about a Thursday has not objected to
+        // it, and flagging them would turn silence into an answer — which is the one thing
+        // nothing in this app does.
+        if (state !== "AWAY" || away.has(profileId)) continue;
+        const run =
+          rows.find(
+            (row) =>
+              row.profileId === profileId &&
+              row.startsOn <= day &&
+              (row.endsOn === null || row.endsOn >= day),
+          ) ?? null;
+        away.set(profileId, run?.note ?? null);
       }
     }
 
@@ -124,9 +120,9 @@ export async function getPollView(
       tally: talliesById.get(option.optionId)!,
       isSettled: poll.settledOptionId === option.optionId,
       awayNotes: [...away]
-        .map(([profileId, place]) => ({
+        .map(([profileId, note]) => ({
           member: membersByProfileId.get(profileId)!,
-          place,
+          note,
         }))
         // Board order, so the notes read down the page the same way the avatars do.
         .sort((a, b) => a.member.sortOrder - b.member.sortOrder),
@@ -135,7 +131,6 @@ export async function getPollView(
 
   return {
     poll,
-    gatheringPlace,
     members,
     options,
     ranked: rankOptions(tallies),

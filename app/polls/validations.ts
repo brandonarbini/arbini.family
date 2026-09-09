@@ -30,7 +30,7 @@ const optionPair = z.string().transform((value, ctx) => {
     ctx.addIssue({ code: "custom", message: "That isn't a real date" });
     return z.NEVER;
   }
-  // Inclusive, matching `Stay`: a single day has matching dates, so equal is legitimate.
+  // Inclusive, matching `Presence`: a single day has matching dates, so equal is legitimate.
   if (endsOn < startsOn) {
     ctx.addIssue({
       code: "custom",
@@ -42,12 +42,6 @@ const optionPair = z.string().transform((value, ctx) => {
 });
 
 export const createPollSchema = z.object({
-  // "" is an untouched select, which means "wherever home is" rather than "invalid" — settling
-  // resolves it. Normalizing here keeps that HTML detail out of the service.
-  placeId: z.preprocess(
-    (value) => (value === "" || value === undefined ? null : value),
-    z.uuid().nullable(),
-  ),
   title: z
     .string()
     .trim()

@@ -31,7 +31,7 @@ export default async function PollPage({
   const view = await getPollView(id, actor.profileId);
   if (!view) notFound();
 
-  const { poll, gatheringPlace, members, options, ranked } = view;
+  const { poll, members, options, ranked } = view;
   const mayManage = canManagePoll(actor, poll.createdById);
   // A leader only when it actually leads: with nothing answered every option ties at zero, and
   // labelling the first one "best so far" would be the board inventing a preference nobody has
@@ -54,13 +54,6 @@ export default async function PollPage({
               says who started it quietly reads as something the parents do.
             */}
             {poll.createdByName ? `${poll.createdByName} asked` : "Asked"}
-            {/*
-              Only when it is somewhere other than home. Printing "at Home" on every weekly dinner
-              poll is a word that never varies, which is a word nobody reads.
-            */}
-            {gatheringPlace && !gatheringPlace.isHome
-              ? ` · at ${gatheringPlace.name}`
-              : ""}
             {poll.status === "SETTLED" ? " · settled" : ""}
           </p>
           <ShareLink />
@@ -176,9 +169,10 @@ function OptionRow({
       {option.awayNotes.length > 0 ? (
         <p className="font-copy mt-1 text-sm text-muted-foreground/80">
           {option.awayNotes
-            .map(
-              (note) =>
-                `${firstName(note.member.name)}'s at ${note.place.name}`,
+            .map((entry) =>
+              entry.note
+                ? `${firstName(entry.member.name)}'s away — ${entry.note}`
+                : `${firstName(entry.member.name)}'s away`,
             )
             .join(" · ")}
         </p>

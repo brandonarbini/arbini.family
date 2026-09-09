@@ -27,14 +27,9 @@ async function makeProfile(name: string, role: FamilyRole = FamilyRole.KID) {
   return { userId: user.id, profileId: profile.id };
 }
 
-async function makePlace(name: string, isHome = false) {
-  return prisma.place.create({ data: { name, isHome } });
-}
-
 async function makePoll(createdById: string | null = null) {
   return createPoll({
     title: "Dinner together",
-    placeId: null,
     createdById,
     options: [
       { startsOn: "2026-12-03", endsOn: "2026-12-03" },
@@ -53,7 +48,6 @@ describe("createPoll", () => {
   it("stores options in date order with contiguous sortOrder", async () => {
     const { id } = await createPoll({
       title: "  Dinner together  ",
-      placeId: null,
       createdById: brandon.userId,
       options: [
         { startsOn: "2026-12-06", endsOn: "2026-12-06" },
@@ -78,7 +72,6 @@ describe("createPoll", () => {
     // `YYYY-MM-DD` string must come back as that string, not the day either side of it.
     const { id } = await createPoll({
       title: "New Year",
-      placeId: null,
       createdById: null,
       options: [{ startsOn: "2027-01-01", endsOn: "2027-01-01" }],
     });
@@ -92,7 +85,6 @@ describe("createPoll", () => {
     await expect(
       createPoll({
         title: "Empty",
-        placeId: null,
         createdById: null,
         options: [],
       }),
@@ -234,11 +226,9 @@ describe("settlePoll", () => {
  * nothing else already knows.
  */
 describe("settlePoll writes to the board", () => {
-  let home: Awaited<ReturnType<typeof makePlace>>;
   let addison: Awaited<ReturnType<typeof makeProfile>>;
 
   beforeEach(async () => {
-    home = await makePlace("Home", true);
     addison = await makeProfile("addison", FamilyRole.KID);
   });
 
@@ -267,7 +257,6 @@ describe("settlePoll writes to the board", () => {
   it("notes the span when the option covers more than one day", async () => {
     const { id } = await createPoll({
       title: "Thanksgiving",
-      placeId: null,
       createdById: null,
       options: [{ startsOn: "2026-11-25", endsOn: "2026-11-29" }],
     });
@@ -280,143 +269,78 @@ describe("settlePoll writes to the board", () => {
     expect(event.note).toBe("2026-11-25 to 2026-11-29");
   });
 
-  it("writes a stay for everybody who said yes", async () => {
-    // The stay is the whole point: nothing else in the system puts a person anywhere, so a yes
-    // that wrote no row would leave the board with a gap on the date the family just agreed on.
+  it("writes nothing about where anybody will be, however they answered", async () => {
+    // Settling used to write a stay per yes, because under the place model that was the only
+    // thing putting a person anywhere — saying yes to a Thursday *was* the location signal. It is
+    // not any more, and this is the test that says so: answering a poll must not quietly assert
+    // two days of somebody's calendar. If they mean it, they say so on their own strip.
     const { id } = await makePoll();
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
     });
     await replyToPoll(option.id, addison.profileId, ReplyKind.YES);
     await replyToPoll(option.id, brandon.profileId, ReplyKind.YES);
+
     await settlePoll(id, option.id);
 
-    const stays = await prisma.stay.findMany({
-      where: { pollId: id },
-      orderBy: { profileId: "asc" },
-    });
-    expect(stays).toHaveLength(2);
-    expect(stays.map((stay) => stay.profileId).sort()).toEqual(
-      [addison.profileId, brandon.profileId].sort(),
-    );
-    for (const stay of stays) {
-      expect(stay.placeId).toBe(home.id);
-      expect(stay.startsOn.toISOString()).toBe(option.startsOn.toISOString());
-      expect(stay.endsOn?.toISOString()).toBe(option.endsOn.toISOString());
-    }
-  });
-
-  it("writes no stay for a no, a maybe, or a silence", async () => {
-    // The line the whole board is built on: never invent a fact about a person. A stay written
-    // for somebody who declined would say they are somewhere they said they would not be.
-    const tanner = await makeProfile("tanner");
-    const macy = await makeProfile("macy");
-    const { id } = await makePoll();
-    const option = await prisma.pollOption.findFirstOrThrow({
-      where: { pollId: id },
-    });
-    await replyToPoll(option.id, addison.profileId, ReplyKind.NO);
-    await replyToPoll(option.id, tanner.profileId, ReplyKind.MAYBE);
-    // macy answers nothing at all
-    void macy;
-    await settlePoll(id, option.id);
-
-    expect(await prisma.stay.count({ where: { pollId: id } })).toBe(0);
-  });
-
-  it("only counts replies to the option that actually won", async () => {
-    const { id } = await makePoll();
-    const options = await prisma.pollOption.findMany({
-      where: { pollId: id },
-      orderBy: { sortOrder: "asc" },
-    });
-    await replyToPoll(options[1].id, addison.profileId, ReplyKind.YES);
-
-    await settlePoll(id, options[0].id);
-
-    expect(await prisma.stay.count({ where: { pollId: id } })).toBe(0);
-  });
-
-  it("settles at the poll's own place, not at home", async () => {
-    const beach = await makePlace("The beach");
-    const { id } = await createPoll({
-      title: "Beach day?",
-      placeId: beach.id,
-      createdById: null,
-      options: [{ startsOn: "2026-09-05", endsOn: "2026-09-05" }],
-    });
-    const option = await prisma.pollOption.findFirstOrThrow({
-      where: { pollId: id },
-    });
-    await replyToPoll(option.id, brandon.profileId, ReplyKind.YES);
-    await settlePoll(id, option.id);
-
-    const stays = await prisma.stay.findMany({ where: { pollId: id } });
-    expect(stays).toHaveLength(1);
-    expect(stays[0].placeId).toBe(beach.id);
+    expect(await prisma.presence.count()).toBe(0);
   });
 
   it("leaves no ghosts when the family settles on a different date", async () => {
-    // Settle, reopen, settle elsewhere is ordinary. Without the clear-then-write the board would
+    // Settle, reopen, settle elsewhere is ordinary. Without the clear-then-write the agenda would
     // accumulate every date the family ever considered.
     const { id } = await makePoll();
     const options = await prisma.pollOption.findMany({
       where: { pollId: id },
       orderBy: { sortOrder: "asc" },
     });
-    await replyToPoll(options[0].id, addison.profileId, ReplyKind.YES);
-    await replyToPoll(options[1].id, addison.profileId, ReplyKind.YES);
 
     await settlePoll(id, options[0].id);
     await settlePoll(id, options[1].id);
 
-    expect(await prisma.event.count({ where: { pollId: id } })).toBe(1);
-    const stays = await prisma.stay.findMany({ where: { pollId: id } });
-    expect(stays).toHaveLength(1);
-    expect(stays[0].startsOn.toISOString()).toBe(
+    const events = await prisma.event.findMany({ where: { pollId: id } });
+    expect(events).toHaveLength(1);
+    expect(events[0].date.toISOString()).toBe(
       options[1].startsOn.toISOString(),
     );
   });
 
-  it("takes the date back off the board when the poll is reopened", async () => {
+  it("takes the date back off the agenda when the poll is reopened", async () => {
     const { id } = await makePoll();
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
     });
-    await replyToPoll(option.id, addison.profileId, ReplyKind.YES);
     await settlePoll(id, option.id);
 
     await reopenPoll(id);
 
     expect(await prisma.event.count({ where: { pollId: id } })).toBe(0);
-    expect(await prisma.stay.count({ where: { pollId: id } })).toBe(0);
     const poll = await prisma.poll.findUniqueOrThrow({ where: { id } });
     expect(poll.status).toBe("OPEN");
     expect(poll.settledOptionId).toBeNull();
   });
 
-  it("takes the date off the board when the poll is deleted", async () => {
+  it("takes the date off the agenda when the poll is deleted", async () => {
     const { id } = await makePoll();
     const option = await prisma.pollOption.findFirstOrThrow({
       where: { pollId: id },
     });
-    await replyToPoll(option.id, addison.profileId, ReplyKind.YES);
     await settlePoll(id, option.id);
 
     await deletePoll(id);
 
     expect(await prisma.event.count()).toBe(0);
-    expect(await prisma.stay.count()).toBe(0);
   });
 
-  it("leaves stays somebody typed themselves alone", async () => {
-    // Cascade is scoped to rows settling wrote. A trip entered by hand has no `pollId` and must
-    // survive the poll being deleted.
+  it("leaves what somebody said about their own days alone", async () => {
+    // Presence carries no `pollId` at all now, so nothing settling does can reach it. Worth a
+    // test rather than an assumption: this used to be a cascade scoped by that column, and the
+    // column going away is exactly the kind of change that quietly widens a delete.
     const { id } = await makePoll();
-    const typed = await prisma.stay.create({
+    const mine = await prisma.presence.create({
       data: {
         profileId: addison.profileId,
-        placeId: home.id,
+        state: "AWAY",
         startsOn: new Date("2026-12-20T00:00:00Z"),
         endsOn: new Date("2026-12-27T00:00:00Z"),
       },
@@ -425,7 +349,7 @@ describe("settlePoll writes to the board", () => {
     await deletePoll(id);
 
     expect(
-      await prisma.stay.findUnique({ where: { id: typed.id } }),
+      await prisma.presence.findUnique({ where: { id: mine.id } }),
     ).not.toBeNull();
   });
 });

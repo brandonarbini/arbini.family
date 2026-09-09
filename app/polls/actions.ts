@@ -25,7 +25,7 @@ import {
 /**
  * Mutations for polls.
  *
- * The same thin shell as the stay editor: authenticate, validate, authorize, call the service,
+ * The same thin shell as the Around strip: authenticate, validate, authorize, call the service,
  * invalidate. Failures are *returned* rather than thrown, because a thrown error reaches the
  * client as an opaque production digest with nothing to attach to a field.
  *
@@ -42,7 +42,6 @@ export async function startPoll(
 
   const parsed = createPollSchema.safeParse({
     title: formData.get("title") ?? undefined,
-    placeId: formData.get("placeId") ?? undefined,
     options: formData.getAll("option"),
   });
   if (!parsed.success) {
@@ -57,7 +56,6 @@ export async function startPoll(
 
   const poll = await createPoll({
     title: parsed.data.title,
-    placeId: parsed.data.placeId,
     createdById: actor.id,
     options: parsed.data.options,
   });
@@ -85,7 +83,7 @@ export async function answer(
   const { optionId, profileId, kind } = parsed.data;
 
   // Checked against the *submitted* profile, which travels in a form field anyone could change.
-  // Stricter than the stay editor on purpose: a parent may fix a kid's travel dates, but nobody
+  // Stricter than the Around strip on purpose: a parent may paint a kid's days, but nobody
   // answers a poll in somebody else's voice.
   if (!canReplyAsProfile(actor, profileId)) {
     return { ok: false, formError: "Only you can answer for you." };
@@ -132,17 +130,21 @@ export async function decide(
     }
   }
 
-  // Settling writes an event and, for whoever has to travel, a stay — and reopening takes them
-  // back out. Invalidating only the poll tag would leave the board showing yesterday's answer to
-  // "when are we next all together", which is the one question this whole feature exists to move.
+  // Settling writes an event, and reopening takes it back out. Invalidating only the poll tag
+  // would leave the agenda showing a date the family has since un-agreed on.
   invalidateBoard();
   return { ok: true };
 }
 
-/** Every tag a settlement touches. Named once so a new write cannot forget one of them. */
+/**
+ * Every tag a settlement touches. Named once so a new write cannot forget one of them.
+ *
+ * `presence` is deliberately absent. Settling used to write a stay per yes, so it had to be here;
+ * it no longer writes anything about where anybody will be, and busting the presence tag would be
+ * a claim that it might.
+ */
 function invalidateBoard(): void {
   updateTag(BOARD_TAGS.polls);
-  updateTag(BOARD_TAGS.stays);
   updateTag(BOARD_TAGS.events);
 }
 
@@ -165,7 +167,7 @@ export async function removePoll(
     return { ok: false, formError: "Only whoever asked can delete this." };
   }
 
-  // Cascade takes the event and stays with it, so the board has to be told about all three.
+  // Cascade takes the settled event with the poll, so the agenda has to be told as well.
   await deletePoll(parsed.data.pollId);
   invalidateBoard();
   redirect("/polls");

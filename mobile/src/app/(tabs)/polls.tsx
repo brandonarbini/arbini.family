@@ -71,7 +71,6 @@ function Poll({ poll }: { poll: PollDto }) {
       <Copy muted style={styles.subhead}>
         {settled ? 'Settled' : poll.awaitingYou ? 'Waiting on you' : 'Answered'}
         {poll.askedByName ? ` · asked by ${poll.askedByName.split(' ')[0]}` : ''}
-        {poll.placeName ? ` · at ${poll.placeName}` : ''}
       </Copy>
 
       <RuledList>

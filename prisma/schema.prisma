@@ -143,84 +143,81 @@ enum FamilyRole {
 
 // Family facts kept out of `User`, which Better Auth owns and reshapes across upgrades.
 model Profile {
-  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId         String     @unique @map("user_id") @db.Uuid
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role           FamilyRole
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String     @unique @map("user_id") @db.Uuid
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      FamilyRole
   // A calendar date, not an instant: a birthday is the same day everywhere. Read through
   // `calendarDateFromDbDate` in `lib/dates.ts`, never by formatting the column directly.
-  birthday       DateTime?  @db.Date
-  phone          String?
+  birthday  DateTime?  @db.Date
+  phone     String?
   // Accent colour for this person across the board, so a row is identifiable at a glance.
-  color          String?
-  sortOrder      Int        @map("sort_order")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  color     String?
+  sortOrder Int        @map("sort_order")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
 
-  stays       Stay[]
+  presence    Presence[]
   pollReplies PollReply[]
 
   @@map("profiles")
 }
 
-// Somewhere a person can be. `name` is unique because `findNextGathering` decides togetherness by
-// comparing place *ids*: two rows both called "Home" would render as everyone being home while the
-// countdown insisted the family was apart, which is the kind of contradiction nobody would think
-// to look for in the data.
+// Presence as a stretch of days and a state, rather than a place.
 //
-// Exactly one row should carry `isHome`. Postgres can enforce that with a partial unique index
-// (`CREATE UNIQUE INDEX ... ON places (is_home) WHERE is_home`), which Prisma cannot express in
-// the schema — add it as raw SQL in the migration if a second one ever appears.
-model Place {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String   @unique
-  address   String?
-  isHome    Boolean  @default(false) @map("is_home")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  stays Stay[]
-  polls Poll[]
-
-  @@map("places")
+// **AROUND means "I'll be with the family." Not "at home", and not "free".**
+//
+// The whole board rests on that one word, so it is written down here rather than left to be
+// inferred from the column name. Read as "available", AROUND is a claim about one person with no
+// shared referent, and five independent yeses would get rendered as one shared fact — the board
+// would announce a gathering because Brandon is around in Topeka and Addison is around in Costa
+// Mesa. Read as "I'll be there", it is a statement about the same occasion for everybody, so
+// Christmas at Grandma's is five AROUNDs and an `Event` that says where.
+//
+// This replaced a `Stay` at a `Place`. Comparing place ids proved co-location, which sounds
+// stronger and was: the trouble is that it required somebody to name a place for every ordinary
+// day, and nobody ever did, so the board sat at five rows of "not recorded" and the countdown
+// never fired. A question the family will answer, answered, beats a stronger one they won't.
+enum PresenceState {
+  AROUND
+  AWAY
 }
 
-// Presence as a date range at a place rather than a status field on a person. Every question the
-// board asks — who is where today, who arrives this month, when all five are next together — is
-// derived from these rows by `lib/presence.ts`.
+// A stretch of days somebody has said they will, or will not, be with the family.
 //
-// `endsOn` is the *last day at the place*, not the day of departure, so a one-night stay has
-// matching dates. `null` means open-ended: they are there until told otherwise.
-model Stay {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  profileId String    @map("profile_id") @db.Uuid
-  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  placeId   String    @map("place_id") @db.Uuid
-  // Restrict, not Cascade: deleting a place must not silently erase the history of everyone who
-  // ever stayed there. The delete should fail and force the caller to deal with the stays first.
-  place     Place     @relation(fields: [placeId], references: [id], onDelete: Restrict)
-  startsOn  DateTime  @map("starts_on") @db.Date
-  endsOn    DateTime? @map("ends_on") @db.Date
+// `endsOn` is the *last day*, not the day after, so a single day has matching dates — which is
+// what somebody painting one cell on the strip expects. `null` means open-ended: it holds until
+// they say otherwise, and that is the case a row-per-day model could not express without a
+// horizon and something to keep extending it.
+//
+// Rows for one person never overlap, because every write goes through `applyRange` in
+// `lib/presence/ranges.ts`, which trims and splits whatever it lands on. `presenceOn` keeps its
+// tie-breaking rule anyway — a guard that is already written and already tested is not worth
+// deleting to prove the invariant holds.
+//
+// A day no row covers is *unsaid*, and the board renders it as such rather than guessing. That is
+// the rule `cb4bf66` established when it deleted `Profile.defaultPlaceId`, and retiring places
+// does not relax it.
+model Presence {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId String        @map("profile_id") @db.Uuid
+  profile   Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  state     PresenceState
+  startsOn  DateTime      @map("starts_on") @db.Date
+  endsOn    DateTime?     @map("ends_on") @db.Date
+  // Free text, shown beside an away run — "Vanguard", "work trip". Display only: nothing compares
+  // it, which is the difference between a note and the `Place` rows this replaced.
   note      String?
-  // Set when this stay was written by settling a poll rather than typed by a person.
-  //
-  // Cascade, unlike `Event.createdById`'s SetNull just below — and the difference is the point.
-  // That column is about *attribution* surviving its author; this one marks a row that is
-  // *derived*, and a derived row must not outlive the thing it was derived from. Deleting a poll
-  // says the plan is off, so the travel it arranged goes with it.
-  pollId    String?   @map("poll_id") @db.Uuid
-  poll      Poll?     @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
 
-  // Covers both the per-person lookup and the board's window scan over upcoming dates.
+  // Covers both the per-person strip and the board's window scan over upcoming dates.
   @@index([profileId, startsOn])
   @@index([startsOn])
-  @@index([pollId])
-  @@map("stays")
+  @@map("presence")
 }
 
-// Dated things worth putting on the board that are not stays — a graduation, a holiday. Birthdays
+// Dated things worth putting on the board that are not presence — a graduation, a holiday. Birthdays
 // are deliberately absent: they are derived from `Profile.birthday` rather than duplicated here,
 // so they cannot drift out of sync with the person.
 model Event {
@@ -233,7 +230,9 @@ model Event {
   // attribution for it.
   createdById String?  @map("created_by_id") @db.Uuid
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  // Set when settling a poll put this on the calendar. Cascade, for the reason on `Stay.pollId`.
+  // Set when settling a poll put this on the calendar. Cascade rather than SetNull, unlike
+  // `createdById` just above — that column is about *attribution* surviving its author, this one
+  // marks a row that is *derived*, and a derived row must not outlive its source.
   pollId      String?  @map("poll_id") @db.Uuid
   poll        Poll?    @relation(fields: [pollId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
@@ -268,13 +267,6 @@ model Poll {
   title  String
   status PollStatus @default(OPEN)
 
-  // Where the gathering is, which settling needs in order to know what to write a stay *to*.
-  // Optional: most weekly polls are about the house, so the form defaults it to home and settling
-  // falls back to home when it is absent. Restrict matches Stay — deleting a place must not
-  // silently rewrite where the family agreed to meet.
-  placeId String? @map("place_id") @db.Uuid
-  place   Place?  @relation(fields: [placeId], references: [id], onDelete: Restrict)
-
   // The option the family landed on. Unique because an option can settle at most one poll, which
   // is what lets Prisma express this as a relation rather than a bare column with a hand-written
   // constraint. SetNull rather than Cascade: deleting one option must not silently un-settle a
@@ -291,15 +283,16 @@ model Poll {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   options PollOption[] @relation("PollOptions")
-  // Rows settling wrote. Cascade-deleted with the poll — see `Stay.pollId`.
-  stays   Stay[]
+  // The events settling wrote. Cascade-deleted with the poll: an event derived from a decision
+  // must not outlive the decision. Settling writes nothing else — it used to write a stay per
+  // yes, which meant answering a poll silently asserted where you would be.
   events  Event[]
 
   @@index([status, createdAt])
   @@map("polls")
 }
 
-// A candidate date. `endsOn` is the *last day*, inclusive — the same convention as `Stay`, so a
+// A candidate date. `endsOn` is the *last day*, inclusive — the same convention as `Presence`, so a
 // single-day option has matching dates and a holiday week is the same shape with a wider range.
 // Weekly polls are almost always single days.
 model PollOption {

@@ -1,11 +1,13 @@
 import "server-only";
 
-import { PollStatus, ReplyKind } from "@/generated/prisma/enums";
+import { PollStatus, type ReplyKind } from "@/generated/prisma/enums";
 import {
   type CalendarDate,
   calendarDateFromDbDate,
   dbDateFromCalendarDate,
 } from "@/lib/dates";
+import type { PresenceState } from "@/lib/presence/derive";
+import { type Plan, type Run, setDays } from "@/lib/presence/ranges";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -17,36 +19,71 @@ import { prisma } from "@/lib/prisma";
  * three places that can disagree.
  */
 
-export interface StayInput {
+export interface PresenceInput {
   profileId: string;
-  placeId: string;
-  startsOn: CalendarDate;
-  /** `null` means open-ended: there until told otherwise. */
-  endsOn: CalendarDate | null;
+  /**
+   * The days being spoken for. Need not be contiguous — the strip is a fortnight of individually
+   * tappable cells, and "Friday, Saturday and the Tuesday after" is one act rather than three.
+   */
+  dates: readonly CalendarDate[];
+  /** `null` clears the days, returning them to unsaid rather than recording an away. */
+  state: PresenceState | null;
   note: string | null;
 }
 
-export async function createStay(input: StayInput): Promise<{ id: string }> {
-  const stay = await prisma.stay.create({
-    data: toRow(input),
-    select: { id: true },
-  });
-  return stay;
-}
-
-export async function updateStay(
-  stayId: string,
-  input: StayInput,
+/**
+ * Say what a set of days looks like.
+ *
+ * The caller hands in the rows that person already has — read *uncached*, via
+ * `getPresenceForProfileUncached`, because this computes deletes against them and a snapshot
+ * would delete rows that have already moved.
+ *
+ * `setDays` decides what the calendar should look like; this only writes it. The delete and the
+ * creates go in one transaction, because between them the person has a hole in their calendar and
+ * the board would render them as unsaid for however long that lasted.
+ */
+export async function setPresence(
+  existing: readonly Run[],
+  input: PresenceInput,
 ): Promise<void> {
-  await prisma.stay.update({ where: { id: stayId }, data: toRow(input) });
+  const plan = setDays(
+    existing,
+    input.dates,
+    input.state,
+    // Empty is absent. A whitespace-only note renders as a blank line on the board, and it also
+    // stops two otherwise-identical runs from merging.
+    input.note?.trim() ? input.note.trim() : null,
+  );
+
+  await writePlan(plan, input.profileId);
 }
 
-export async function deleteStay(stayId: string): Promise<void> {
-  await prisma.stay.delete({ where: { id: stayId } });
+async function writePlan(plan: Plan, profileId: string): Promise<void> {
+  if (plan.deleteIds.length === 0 && plan.create.length === 0) return;
+
+  await prisma.$transaction([
+    // Scoped to the profile as well as the ids. `setDays` is pure and trusts what it was handed,
+    // so a caller that passed somebody else's rows would otherwise delete them; this is the one
+    // place that can still refuse.
+    prisma.presence.deleteMany({
+      where: { id: { in: plan.deleteIds }, profileId },
+    }),
+    ...plan.create.map((run) =>
+      prisma.presence.create({
+        data: {
+          profileId,
+          state: run.state,
+          startsOn: dbDateFromCalendarDate(run.startsOn),
+          endsOn: run.endsOn ? dbDateFromCalendarDate(run.endsOn) : null,
+          note: run.note,
+        },
+      }),
+    ),
+  ]);
 }
 
 /**
- * `endsOn` is the last day *at* the place, so a same-day value is a legitimate one-night stay
+ * `endsOn` is the last day the statement holds, so a same-day value is a legitimate single day
  * rather than an empty range. Enforced in `validations.ts` too, where it can produce a field
  * error; repeated here because this module is callable without going through a form.
  */
@@ -57,39 +94,21 @@ export function isValidRange(
   return endsOn === null || endsOn >= startsOn;
 }
 
-function toRow(input: StayInput) {
-  if (!isValidRange(input.startsOn, input.endsOn)) {
-    throw new Error(
-      `Stay ends (${input.endsOn}) before it starts (${input.startsOn})`,
-    );
-  }
-  return {
-    profileId: input.profileId,
-    placeId: input.placeId,
-    startsOn: dbDateFromCalendarDate(input.startsOn),
-    endsOn: input.endsOn ? dbDateFromCalendarDate(input.endsOn) : null,
-    // Empty is absent. A whitespace-only note renders as a blank line on the board.
-    note: input.note?.trim() ? input.note.trim() : null,
-  };
-}
-
 /**
  * Polls.
  *
- * Same contract as the stay writes above: auth-free, because the caller has already established
- * who is acting and whether they may.
+ * Same contract as the presence writes above: auth-free, because the caller has already
+ * established who is acting and whether they may.
  */
 
 export interface PollOptionInput {
   startsOn: CalendarDate;
-  /** Last day of the option, inclusive — matching `Stay`. A single day has matching dates. */
+  /** Last day of the option, inclusive — matching `Presence`. A single day has matching dates. */
   endsOn: CalendarDate;
 }
 
 export interface PollInput {
   title: string;
-  /** Where the gathering is. Null means "wherever home is", resolved when the poll settles. */
-  placeId: string | null;
   /** The user who asked. Null only for a poll created outside a session. */
   createdById: string | null;
   options: readonly PollOptionInput[];
@@ -112,7 +131,6 @@ export async function createPoll(input: PollInput): Promise<{ id: string }> {
   const poll = await prisma.poll.create({
     data: {
       title: input.title.trim(),
-      placeId: input.placeId,
       createdById: input.createdById,
       options: {
         create: options.map((option, index) => ({
@@ -159,7 +177,7 @@ export async function clearReply(
 }
 
 /**
- * Settle a poll on one of its own options, and write the result onto the board.
+ * Settle a poll on one of its own options, and put the date on the board.
  *
  * The option is looked up scoped to the poll first. Without that scope a caller could settle a
  * poll on an option belonging to a different one, and the ballot would then render a chosen date
@@ -170,23 +188,16 @@ export async function clearReply(
  *
  * ## What settling writes
  *
- * One `Event`, always — the whole point of settling is that the date lands on the board's agenda
- * rather than living inside a poll nobody reopens.
+ * One `Event`, and nothing else. The whole point of settling is that the date lands on the
+ * board's agenda rather than living inside a poll nobody reopens.
  *
- * Then a `Stay` for everybody who said yes, and for nobody else. Both halves of that are
- * deliberate:
+ * It used to also write a stay for everybody who said yes, because under the place-based model
+ * that was the only thing putting a person anywhere — saying yes to a date *was* the location
+ * signal. That coupling is gone, and good riddance: answering a poll should not quietly assert
+ * where you will be for two days. Somebody who says yes and means it says so on their strip, and
+ * the strip is one tap.
  *
- * - *Only yes.* Writing a stay for somebody who said no, or who never answered, would be the app
- *   inventing a fact about a person. That is the thing the board refuses to do everywhere else —
- *   it is why an unrecorded day reads "not recorded" rather than "home" — and settling a poll is
- *   not a licence to start.
- * - *Every yes, including the people who are usually there anyway.* Nothing else puts a person
- *   anywhere: the board has no notion of where somebody lives, so a day no stay covers is
- *   unknown. Skipping the stay for whoever is normally home would leave `findNextGathering` with
- *   a gap on the very date the family just agreed on, and the countdown would never fire. Saying
- *   yes to a date *is* the location signal, and this is where it gets recorded.
- *
- * The writes happen in a transaction that first clears anything a previous settlement left, so
+ * The event is written in a transaction that first clears anything a previous settlement left, so
  * settle → reopen → settle elsewhere leaves no ghosts. That idempotence is what makes this safe
  * to press twice.
  */
@@ -196,7 +207,7 @@ export async function settlePoll(
 ): Promise<boolean> {
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
-    select: { title: true, placeId: true, createdById: true },
+    select: { title: true, createdById: true },
   });
   if (!poll) return false;
 
@@ -206,30 +217,10 @@ export async function settlePoll(
   });
   if (!option) return false;
 
-  // Falls back to home when the poll named no place: a weekly "dinner together" is about the
-  // house, and making somebody pick that every time is the friction this feature exists to avoid.
-  const place =
-    poll.placeId ??
-    (
-      await prisma.place.findFirst({
-        where: { isHome: true },
-        select: { id: true },
-      })
-    )?.id ??
-    null;
-
-  const attendees = place
-    ? await prisma.pollReply.findMany({
-        where: { optionId, kind: ReplyKind.YES },
-        select: { profileId: true },
-      })
-    : [];
-
   await prisma.$transaction([
     // Clear a previous settlement before writing this one, or the board accumulates every date
     // the family ever considered.
     prisma.event.deleteMany({ where: { pollId } }),
-    prisma.stay.deleteMany({ where: { pollId } }),
     prisma.poll.update({
       where: { id: pollId },
       data: {
@@ -250,18 +241,6 @@ export async function settlePoll(
         pollId,
       },
     }),
-    ...attendees.map((reply) =>
-      prisma.stay.create({
-        data: {
-          profileId: reply.profileId,
-          placeId: place!,
-          startsOn: option.startsOn,
-          endsOn: option.endsOn,
-          note: poll.title,
-          pollId,
-        },
-      }),
-    ),
   ]);
 
   return true;
@@ -269,11 +248,10 @@ export async function settlePoll(
 
 /** Reopen a settled poll — somebody's plans changed, which is ordinary. */
 export async function reopenPoll(pollId: string): Promise<void> {
-  // The board has to stop claiming a gathering the moment the family stops agreeing on one, so
-  // the derived rows go back out in the same transaction that reopens the poll.
+  // The agenda has to stop claiming a date the moment the family stops agreeing on one, so the
+  // derived event goes back out in the same transaction that reopens the poll.
   await prisma.$transaction([
     prisma.event.deleteMany({ where: { pollId } }),
-    prisma.stay.deleteMany({ where: { pollId } }),
     prisma.poll.update({
       where: { id: pollId },
       data: { status: PollStatus.OPEN, settledOptionId: null, settledAt: null },
