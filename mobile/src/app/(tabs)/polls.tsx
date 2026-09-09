@@ -6,6 +6,7 @@ import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import { formatShortDay } from '@/lib/dates';
@@ -18,7 +19,8 @@ import { useAnswerPoll, useMe, usePolls } from '@/lib/queries';
  * a decision somebody makes once. Both stay on the web until there is a reason to move them.
  */
 export default function PollsScreen() {
-  const { data, isPending, error, refetch, isRefetching } = usePolls();
+  const { data, isPending, error, refetch } = usePolls();
+  const pull = usePullToRefresh(refetch);
 
   if (isPending) return <Page dateline="Loading">{null}</Page>;
 
@@ -41,10 +43,7 @@ export default function PollsScreen() {
   const ordered = [...data].sort((a, b) => Number(b.awaitingYou) - Number(a.awaitingYou));
 
   return (
-    <Page
-      dateline="Asks"
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
+    <Page dateline="Asks" refreshControl={<RefreshControl {...pull} />}>
       {ordered.map((poll) => (
         <Poll key={poll.id} poll={poll} />
       ))}

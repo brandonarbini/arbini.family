@@ -14,6 +14,7 @@ import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, DateStamp, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import {
@@ -31,16 +32,14 @@ import { useBoard, useSetPresence } from '@/lib/queries';
  * the resting state, then the listings.
  */
 export default function BoardScreen() {
-  const { data, isPending, error, refetch, isRefetching } = useBoard();
+  const { data, isPending, error, refetch } = useBoard();
+  const pull = usePullToRefresh(refetch);
 
   if (isPending) return <Page dateline="Loading">{null}</Page>;
   if (error) return <LoadFailure title="The board" error={error} onRetry={refetch} />;
 
   return (
-    <Page
-      dateline={formatDateline(data.today)}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
+    <Page dateline={formatDateline(data.today)} refreshControl={<RefreshControl {...pull} />}>
       <YourTurn board={data} />
       <Today board={data} />
       <Gathering board={data} />

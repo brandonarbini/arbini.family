@@ -33,17 +33,6 @@ export function Page({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
-          /*
-           * Keep what you are looking at where it is when something above it resizes.
-           *
-           * The board is a stack of derived summaries with the editor underneath, so writing a day
-           * re-renders the lede, the Today row and the grid — all of which sit above the strip your
-           * thumb is on. Any of them changing height dragged the strip out from under the finger
-           * between taps. This is the platform's answer to content growing above the viewport, and
-           * it is the right one: the alternative is pinning a height to every summary on the page
-           * and hoping none of them ever wraps differently.
-           */
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           refreshControl={refreshControl}
         >
           <View style={styles.masthead}>
