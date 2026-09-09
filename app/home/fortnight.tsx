@@ -169,7 +169,8 @@ export function Fortnight({
             ? "Tap a day to say you'll be here. Tap it again to take it back."
             : `You're saying this for ${first(selected.name)}.`}
         </p>
-        <p className="font-copy mt-1 text-base text-muted-foreground">
+        {/* Reserved: these sentences differ in length and the strip below must not move. */}
+        <p className="font-copy mt-1 min-h-[1.75rem] text-base text-muted-foreground">
           {describeHorizon(
             selected.horizon,
             selected.profileId === viewerProfileId,
@@ -197,14 +198,14 @@ export function Fortnight({
           ))}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="mt-4">
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
             maxLength={200}
             placeholder="Add a note"
             aria-label="A note to go with the days you paint"
-            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           {/*
             The undo is the whole safety net now that a tap writes. It carries what the day said
@@ -212,19 +213,26 @@ export function Fortnight({
             does in this app, and restoring the state while dropping the reason would be a worse
             kind of loss than not offering undo at all.
           */}
-          {stroke ? (
-            <p className="font-copy text-sm text-muted-foreground">
-              {describeStroke(stroke)}{" "}
-              <button
-                type="button"
-                onClick={undo}
-                disabled={pending}
-                className="text-primary underline underline-offset-4 disabled:opacity-50"
-              >
-                Undo
-              </button>
-            </p>
-          ) : null}
+          {/*
+            Its own line with its height reserved, so the first paint of the day does not push the
+            page around by appearing. On a screen whose whole point is that a tap writes, the thing
+            that says what was written must not itself be a layout event.
+          */}
+          <p className="font-copy mt-2 min-h-[1.5rem] text-sm text-muted-foreground">
+            {stroke ? (
+              <>
+                {describeStroke(stroke)}{" "}
+                <button
+                  type="button"
+                  onClick={undo}
+                  disabled={pending}
+                  className="text-primary underline underline-offset-4 disabled:opacity-50"
+                >
+                  Undo
+                </button>
+              </>
+            ) : null}
+          </p>
         </div>
       </div>
     </div>

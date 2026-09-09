@@ -135,7 +135,9 @@ function Today({ board }: { board: Board }) {
             <span className="font-copy text-sm leading-tight">
               {row.member.name.split(" ")[0]}
             </span>
-            <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
+            {/* Two lines reserved: "here" is one and "nothing said" is two, and a row that
+                changes height as people answer moves everything below it. */}
+            <span className="flex min-h-[2.2em] items-start justify-center text-[0.625rem] uppercase leading-[1.1] tracking-wider text-muted-foreground">
               {row.state === "AROUND"
                 ? "here"
                 : row.state === "AWAY"
@@ -285,19 +287,27 @@ function TheFortnight({
 }
 
 /**
- * "Macy", "Macy and Tanner", "you, Macy and Tanner" — a sentence, not a list.
+ * "Macy", "Macy and Tanner", "you, Macy and 2 more" — a sentence, not a list.
  *
- * "you" is hoisted to the front, the same way the ballot's `list()` does it. The lede is the
- * largest type on the board and it was reading "Waiting on Brandon, Jill, Tanner, Addison and
- * Macy" to Brandon — naming the reader, in the third person, in the one place the app shouts.
- * Every other surface here is careful about this; the newest one forgot.
+ * "you" is hoisted to the front and the tail is truncated at two names, exactly as the ballot's
+ * `list()` does it. Two reasons, and the second is the one that bites.
+ *
+ * The reader has to appear: the lede is the largest type on the board and it was reading "Waiting
+ * on Brandon, Jill, Tanner, Addison and Macy" to Brandon, naming him in the third person in the
+ * one place the app shouts.
+ *
+ * And an uncapped list *changes height as people answer* — five names wrap to three lines, three
+ * names to two, one name to one — so every write shoved the whole page, including the strip your
+ * thumb was on, up or down by forty points. A capped list is one or two lines whatever happens.
  */
 function joinNames(names: string[]): string {
   const ordered = names.includes("you")
     ? ["you", ...names.filter((name) => name !== "you")]
     : names;
-  if (ordered.length <= 1) return ordered[0] ?? "";
-  return `${ordered.slice(0, -1).join(", ")} and ${ordered[ordered.length - 1]}`;
+  if (ordered.length === 0) return "";
+  if (ordered.length === 1) return ordered[0];
+  if (ordered.length === 2) return `${ordered[0]} and ${ordered[1]}`;
+  return `${ordered[0]}, ${ordered[1]} and ${ordered.length - 2} more`;
 }
 
 /**

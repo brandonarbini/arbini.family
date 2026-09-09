@@ -208,17 +208,21 @@ function Gathering({ board }: { board: BoardDto }) {
 }
 
 /**
- * "Macy", "Macy and Tanner", "you, Macy and Tanner" — a sentence, not a list.
+ * "Macy", "Macy and Tanner", "you, Macy and 2 more" — a sentence, not a list.
  *
- * "you" is hoisted to the front. The lede is the largest type on the board and it was naming the
- * reader in the third person, in the one place the app shouts.
+ * "you" is hoisted to the front and the tail truncated at two names, as the ballot does it. Beyond
+ * naming the reader properly, the cap keeps the lede one or two lines whatever happens: an
+ * uncapped list shrinks as people answer, and every write then shoved the page — and the strip
+ * your thumb was on — up by a line.
  */
 function joinNames(names: string[]): string {
   const ordered = names.includes('you')
     ? ['you', ...names.filter((name) => name !== 'you')]
     : names;
-  if (ordered.length <= 1) return ordered[0] ?? '';
-  return `${ordered.slice(0, -1).join(', ')} and ${ordered[ordered.length - 1]}`;
+  if (ordered.length === 0) return '';
+  if (ordered.length === 1) return ordered[0];
+  if (ordered.length === 2) return `${ordered[0]} and ${ordered[1]}`;
+  return `${ordered[0]}, ${ordered[1]} and ${ordered.length - 2} more`;
 }
 
 /**
@@ -416,22 +420,29 @@ function Fortnight({ board }: { board: BoardDto }) {
             before — note and all — because painting over a day deletes the only writing anybody
             does in this app.
           */}
-          {stroke ? (
-            <View style={styles.undo}>
-              <Copy muted style={styles.undoText}>
-                {describeStroke(stroke.date, stroke.now)}
-              </Copy>
-              <Text
-                onPress={() => {
-                  write(stroke.profileId, stroke.date, stroke.was.state, stroke.was.note ?? '');
-                  setStroke(null);
-                }}
-                style={[styles.undoAction, { color: theme.primary }]}
-              >
-                Undo
-              </Text>
-            </View>
-          ) : null}
+          {/*
+            Height reserved, so the first paint of the day does not push the page around simply by
+            appearing. On a screen whose whole point is that a tap writes, the thing that says what
+            was written must not itself be a layout event.
+          */}
+          <View style={styles.undo}>
+            {stroke ? (
+              <>
+                <Copy muted style={styles.undoText}>
+                  {describeStroke(stroke.date, stroke.now)}
+                </Copy>
+                <Text
+                  onPress={() => {
+                    write(stroke.profileId, stroke.date, stroke.was.state, stroke.was.note ?? '');
+                    setStroke(null);
+                  }}
+                  style={[styles.undoAction, { color: theme.primary }]}
+                >
+                  Undo
+                </Text>
+              </>
+            ) : null}
+          </View>
         </View>
       ) : null}
     </Section>
@@ -684,8 +695,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: Spacing.three,
   },
+  // Reserved: these sentences differ in length and the strip below must not move.
   editorHint: {
     fontSize: 15,
+    minHeight: 22,
   },
   brush: {
     flexDirection: 'row',
@@ -751,6 +764,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+    minHeight: 20,
   },
   undoText: {
     fontSize: 14,
@@ -781,11 +795,14 @@ const styles = StyleSheet.create({
   todayName: {
     fontSize: 13,
   },
+  // Two lines reserved: "HERE" is one and "NOTHING SAID" is two, and a row that changes height as
+  // people answer moves everything below it.
   todayState: {
     fontFamily: Fonts.sans,
     fontSize: 8,
     letterSpacing: 0.6,
     textAlign: 'center',
+    minHeight: 20,
   },
   agendaRow: {
     flexDirection: 'row',
