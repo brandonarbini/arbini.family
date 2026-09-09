@@ -74,14 +74,20 @@ export function Copy({
   children,
   muted = false,
   style,
+  numberOfLines,
 }: {
   children: React.ReactNode;
   muted?: boolean;
   style?: StyleProp<TextStyle>;
+  /** Passed through for the few places a name sits in a fixed column and must not wrap. */
+  numberOfLines?: number;
 }) {
   const theme = useTheme();
   return (
-    <Text style={[styles.copy, { color: muted ? theme.textSecondary : theme.text }, style]}>
+    <Text
+      numberOfLines={numberOfLines}
+      style={[styles.copy, { color: muted ? theme.textSecondary : theme.text }, style]}
+    >
       {children}
     </Text>
   );

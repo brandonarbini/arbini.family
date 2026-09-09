@@ -92,6 +92,39 @@ export function formatLongDay(date: CalendarDateString): string {
   return `${WEEKDAYS_LONG[p.weekday]} ${p.day} ${MONTHS_LONG[p.monthIndex]}`;
 }
 
+/**
+ * `EEEEE` — "M", "T", "W". The single letter over a strip or grid cell.
+ *
+ * Ambiguous on its own — Tuesday and Thursday are both "T" — and that is fine here, because the
+ * letter sits directly above the date and the column is read as a position in a week rather than
+ * as a name. Two letters would be the wrong trade at this width.
+ */
+export function formatWeekdayInitial(date: CalendarDateString): string {
+  return WEEKDAYS_LONG[partsOf(date).weekday].slice(0, 1);
+}
+
+/** `d` — the day of the month alone, for a cell that already sits under its weekday. */
+export function formatDayOfMonth(date: CalendarDateString): string {
+  return String(partsOf(date).day);
+}
+
+/**
+ * Shift a calendar date by whole days, in UTC.
+ *
+ * The app does not decide what *today* is — the server sends that — but it does have to walk
+ * forward from it to lay out a strip. UTC because a local shift lands on the same calendar day
+ * across a spring-forward, and "tomorrow" quietly becomes "today".
+ */
+export function addDays(date: CalendarDateString, days: number): CalendarDateString {
+  const p = partsOf(date);
+  const shifted = new Date(Date.UTC(p.year, p.monthIndex, p.day + days));
+  return [
+    String(shifted.getUTCFullYear()).padStart(4, '0'),
+    String(shifted.getUTCMonth() + 1).padStart(2, '0'),
+    String(shifted.getUTCDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 /** `d MMM` — "12 Sep". The tight form used inside a row. */
 export function formatShortDay(date: CalendarDateString): string {
   const p = partsOf(date);
@@ -122,5 +155,8 @@ export function describeRelativeDay(date: CalendarDateString, today: CalendarDat
   const days = daysBetween(today, date);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
-  return formatWeekdayShort(date);
+  // Past a week, the weekday alone stops identifying a day: a 30-day agenda has four Saturdays and
+  // the column exists so the eye can run down *dates*. The web makes the same cut at seven days.
+  if (days > 1 && days <= 7) return formatWeekdayShort(date);
+  return formatShortDay(date);
 }

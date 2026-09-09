@@ -9,21 +9,21 @@ import {
   calendarDateFromDbDate,
   dbDateFromCalendarDate,
 } from "@/lib/dates";
-import type { PollOptionWindow, PollReplyRecord } from "@/lib/polls/tally";
-import type { StayWindow } from "@/lib/presence";
+import type { PollOptionRef, PollReplyRecord } from "@/lib/polls/tally";
+import type { PresenceWindow } from "@/lib/presence/derive";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Shared reads for the family board.
  *
- * Lives in `/lib` rather than beside a route because both `/home` and `/home/where` need the same
+ * Lives in `/lib` rather than beside a route because the board and the API both need the same
  * rows, and a webhook or script would too.
  *
  * This module is also the *boundary*: `@db.Date` columns are converted to `CalendarDate` strings
  * here and nowhere else, so nothing downstream ever holds a `Date` it might format in the wrong
- * zone. Everything below returns plain data that `lib/presence.ts` and `lib/board/birthdays.ts`
- * can be tested against without a database.
+ * zone. Everything below returns plain data that `lib/presence/derive.ts` and
+ * `lib/board/birthdays.ts` can be tested against without a database.
  *
  * No `auth()` here by design — entry points authorize, queries read. There is exactly one family,
  * so there is no tenant key to scope by. That purity is what lets these carry `"use cache"` at
@@ -36,18 +36,18 @@ import { prisma } from "@/lib/prisma";
  *
  * **Cache lifetimes are set by who writes the data, not by how often it changes.** A tag only
  * fires when the write goes through a Server Action, so anything editable from outside the app —
- * profiles and places, both of which come from `prisma/seed.ts`, and events, which have no editor
- * yet — gets `"minutes"`. Members change about never and the instinct is to cache them for days,
- * but that is precisely the trap: setting the family's birthdays means editing the seed and
- * re-running it, and a day-long entry would leave the board insisting nobody has a birthday
- * coming while the database plainly says otherwise. Stays are the one thing written only through
- * a tagged action, so they can afford a longer life.
+ * profiles, which come from `prisma/seed.ts`, and events, which have no editor yet — gets
+ * `"minutes"`. Members change about never and the instinct is to cache them for days, but that is
+ * precisely the trap: setting the family's birthdays means editing the seed and re-running it, and
+ * a day-long entry would leave the board insisting nobody has a birthday coming while the database
+ * plainly says otherwise. Presence is written only through a tagged action, so by that rule it
+ * could afford a longer life — see `getPresenceForWindow` for why it does not take one.
  *
  * These are five-row queries against a local Postgres; the caching here buys correctness of the
  * pattern, not latency, and it is not worth a minute of anyone's confusion.
  */
 
-/** How far ahead `findNextGathering` may look, and therefore how many stays are worth loading. */
+/** How far ahead `findNextGathering` may look, and therefore how many rows are worth loading. */
 export const GATHERING_HORIZON_DAYS = 365;
 
 export interface FamilyMember {
@@ -105,108 +105,95 @@ export async function getFamilyMembers(): Promise<FamilyMember[]> {
   }));
 }
 
-export interface Place {
+export interface BoardPresence extends PresenceWindow {
   id: string;
-  name: string;
-  address: string | null;
-  isHome: boolean;
-}
-
-export async function getPlaces(): Promise<Place[]> {
-  "use cache";
-  cacheTag(BOARD_TAGS.places);
-  cacheLife("minutes");
-
-  const places = await prisma.place.findMany({
-    orderBy: [{ isHome: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, address: true, isHome: true },
-  });
-  return places;
-}
-
-export interface BoardStay extends StayWindow {
-  id: string;
-  note: string | null;
 }
 
 /**
- * Stays that could matter to a board rendered on `from`.
+ * Rows that could matter to a board rendered on `from`.
  *
- * Bounded on both sides. Without the lower bound every stay the family has ever recorded gets
- * loaded to answer a question about this month; without the upper bound a stay booked years out
+ * Bounded on both sides. Without the lower bound every day the family has ever recorded gets
+ * loaded to answer a question about this month; without the upper bound a trip booked years out
  * is loaded to be ignored. The window matches what `findNextGathering` can actually see, so
  * narrowing it further would change answers rather than just save bytes.
  *
- * An open-ended stay (`endsOn: null`) is always a candidate — it has no end to fall before the
+ * An open-ended run (`endsOn: null`) is always a candidate — it has no end to fall before the
  * window.
+ *
+ * `cacheLife("seconds")`, not the `"hours"` the old stays got. Painting the strip is now the main
+ * thing anybody does in this app, and the board is where they look to see it worked. A minute of
+ * staleness there is not a slightly old board, it is the mechanic failing — the same argument
+ * `getPolls` makes below, for the same reason.
  */
-export async function getStaysForWindow(
+export async function getPresenceForWindow(
   from: CalendarDate,
   horizonDays: number = GATHERING_HORIZON_DAYS,
-): Promise<BoardStay[]> {
+): Promise<BoardPresence[]> {
   "use cache";
-  cacheTag(BOARD_TAGS.stays);
-  cacheLife("hours");
+  cacheTag(BOARD_TAGS.presence);
+  cacheLife("seconds");
 
-  const stays = await prisma.stay.findMany({
+  const rows = await prisma.presence.findMany({
     where: {
       startsOn: {
         lte: dbDateFromCalendarDate(addCalendarDays(from, horizonDays)),
       },
       OR: [{ endsOn: null }, { endsOn: { gte: dbDateFromCalendarDate(from) } }],
     },
-    // `createdAt` last so that `locationsOn`, which resolves overlapping stays by taking the
-    // latest element on a tie, gets last-write-wins rather than an arbitrary row.
+    // `createdAt` last so that `coveringOn`, which resolves overlapping runs by taking the latest
+    // element on a tie, gets last-write-wins rather than an arbitrary row.
     orderBy: [{ startsOn: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      profileId: true,
-      placeId: true,
-      startsOn: true,
-      endsOn: true,
-      note: true,
-    },
+    select: PRESENCE_SELECT,
   });
 
-  return stays.map((stay) => ({
-    id: stay.id,
-    profileId: stay.profileId,
-    placeId: stay.placeId,
-    startsOn: calendarDateFromDbDate(stay.startsOn),
-    endsOn: stay.endsOn ? calendarDateFromDbDate(stay.endsOn) : null,
-    note: stay.note,
-  }));
+  return rows.map(toBoardPresence);
 }
 
-/** Every stay for one person, newest first — the editing list on `/home/where`. */
-export async function getStaysForProfile(
+/**
+ * Every run for one person, earliest first.
+ *
+ * Ascending, unlike the editor list that preceded it, because the strip renders left to right
+ * along a calendar rather than as a feed of recent entries.
+ *
+ * Unbounded on purpose: `setDays` folds new days into *all* of somebody's rows, so handing it
+ * a windowed subset would let it merrily create a row overlapping one it could not see.
+ */
+export async function getPresenceForProfile(
   profileId: string,
-): Promise<BoardStay[]> {
+): Promise<BoardPresence[]> {
   "use cache";
-  cacheTag(BOARD_TAGS.stays);
-  cacheLife("hours");
+  cacheTag(BOARD_TAGS.presence);
+  cacheLife("seconds");
 
-  const stays = await prisma.stay.findMany({
+  const rows = await prisma.presence.findMany({
     where: { profileId },
-    orderBy: [{ startsOn: "desc" }],
-    select: {
-      id: true,
-      profileId: true,
-      placeId: true,
-      startsOn: true,
-      endsOn: true,
-      note: true,
-    },
+    orderBy: [{ startsOn: "asc" }, { createdAt: "asc" }],
+    select: PRESENCE_SELECT,
   });
 
-  return stays.map((stay) => ({
-    id: stay.id,
-    profileId: stay.profileId,
-    placeId: stay.placeId,
-    startsOn: calendarDateFromDbDate(stay.startsOn),
-    endsOn: stay.endsOn ? calendarDateFromDbDate(stay.endsOn) : null,
-    note: stay.note,
-  }));
+  return rows.map(toBoardPresence);
+}
+
+const PRESENCE_SELECT = {
+  id: true,
+  profileId: true,
+  state: true,
+  startsOn: true,
+  endsOn: true,
+  note: true,
+} satisfies Prisma.PresenceSelect;
+
+function toBoardPresence(
+  row: Prisma.PresenceGetPayload<{ select: typeof PRESENCE_SELECT }>,
+): BoardPresence {
+  return {
+    id: row.id,
+    profileId: row.profileId,
+    state: row.state,
+    startsOn: calendarDateFromDbDate(row.startsOn),
+    endsOn: row.endsOn ? calendarDateFromDbDate(row.endsOn) : null,
+    note: row.note,
+  };
 }
 
 export interface BoardEvent {
@@ -216,7 +203,7 @@ export interface BoardEvent {
   note: string | null;
 }
 
-/** Dated things that are not stays and not birthdays, within an inclusive window. */
+/** Dated things that are not presence and not birthdays, within an inclusive window. */
 export async function getEventsForWindow(
   from: CalendarDate,
   throughDays: number,
@@ -245,37 +232,37 @@ export async function getEventsForWindow(
 }
 
 export type FamilyMembersData = Awaited<ReturnType<typeof getFamilyMembers>>;
-export type PlacesData = Awaited<ReturnType<typeof getPlaces>>;
-export type StaysData = Awaited<ReturnType<typeof getStaysForWindow>>;
+export type PresenceData = Awaited<ReturnType<typeof getPresenceForWindow>>;
 export type EventsData = Awaited<ReturnType<typeof getEventsForWindow>>;
 
 /**
- * Which profile a stay belongs to, or `null` when there is no such stay.
+ * The rows one person has already said, read fresh.
  *
- * Its own narrow query because the edit and delete actions need the owner *before* they touch the
- * row, to decide whether the caller may. Loading the whole stay to read one column would invite
- * passing the rest of it somewhere it does not belong.
+ * The uncached counterpart of `getPresenceForProfile`, and the one `setDays` is given. A cached
+ * read would be a correctness bug rather than a stale one: folding a new run into a snapshot means
+ * computing deletes against rows that may already be gone, so two people painting at once — or
+ * one person tapping twice — would write overlapping rows against a calendar neither of them saw.
  *
- * Deliberately **not** cached, unlike everything else here. This read is an authorization input:
- * a cached answer would keep saying a stay belongs to whoever owned it when the entry was written,
- * so a reassigned row could be edited by its previous owner for as long as the entry lived.
+ * `getPresenceForProfile` remains for the *rendering* path, where a second of staleness is only a
+ * second of staleness.
  */
-export async function getStayOwnerProfileId(
-  stayId: string,
-): Promise<string | null> {
-  const stay = await prisma.stay.findUnique({
-    where: { id: stayId },
-    select: { profileId: true },
+export async function getPresenceForProfileUncached(
+  profileId: string,
+): Promise<BoardPresence[]> {
+  const rows = await prisma.presence.findMany({
+    where: { profileId },
+    orderBy: [{ startsOn: "asc" }, { createdAt: "asc" }],
+    select: PRESENCE_SELECT,
   });
-  return stay?.profileId ?? null;
+  return rows.map(toBoardPresence);
 }
 
 /**
  * The poll an option belongs to, and whether it is still open.
  *
- * The counterpart of `getStayOwnerProfileId`, and uncached for the same reason: this is an
+ * The counterpart of `getPresenceForProfileUncached`, and uncached for a related reason: this is an
  * authorization input. A cached answer would keep reporting a poll as open after it settled, and a
- * late reply would then change a tally that stays and events were already written from.
+ * late reply would then change a tally that an event was already written from.
  *
  * Narrow on purpose. The reply path needs to know two things, and loading the whole poll to learn
  * them would invite passing the rest of it somewhere it does not belong — and would drag in the
@@ -291,7 +278,11 @@ export async function getPollForOption(
   return option ? { pollId: option.pollId, status: option.poll.status } : null;
 }
 
-export interface BoardPollOption extends PollOptionWindow {
+export interface BoardPollOption extends PollOptionRef {
+  /** What the option says. Null when the date *is* the label — see the column's comment. */
+  label: string | null;
+  /** The day this option is about, when it is about one. */
+  onDate: CalendarDate | null;
   replies: PollReplyRecord[];
 }
 
@@ -299,9 +290,8 @@ export interface BoardPoll {
   id: string;
   title: string;
   status: PollStatus;
-  /** Where the gathering is. Null means home, resolved when the poll settles. */
-  placeId: string | null;
-  placeName: string | null;
+  /** The last day this keeps asking. Written at creation, never inferred here. */
+  closesOn: CalendarDate;
   settledOptionId: string | null;
   createdById: string | null;
   createdByName: string | null;
@@ -312,9 +302,9 @@ export interface BoardPoll {
 /**
  * Polls, newest first, with their options and every reply.
  *
- * `cacheLife("seconds")` rather than the `"hours"` the stays get, and deliberately against the
- * "lifetimes are set by who writes the data" note above. Both of these *are* written only through
- * a tagged Server Action, so by that rule they could live for hours. But answering a poll is the
+ * `cacheLife("seconds")`, deliberately against the "lifetimes are set by who writes the data" note
+ * above. These *are* written only through a tagged Server Action, so by that rule they could live
+ * for hours. But answering a poll is the
  * one screen where five people are looking at the same thing at once, and what each of them is
  * waiting to see is somebody else's avatar light up. A minute of staleness there is not a slightly
  * old board, it is the mechanic failing: you tap, nothing visibly happens, and you stop tapping.
@@ -349,7 +339,7 @@ export async function getPoll(pollId: string): Promise<BoardPoll | null> {
  * Who created a poll, or `null` when there is no such poll.
  *
  * Its own narrow query, and deliberately **not** cached, for the same reason
- * `getStayOwnerProfileId` is not: this is an authorization input. A cached answer would keep
+ * the presence read above is not: this is an authorization input. A cached answer would keep
  * naming whoever created the poll when the entry was written, so it must be read fresh every time
  * settle or delete asks whether the caller may.
  *
@@ -370,8 +360,7 @@ const POLL_SELECT = {
   id: true,
   title: true,
   status: true,
-  placeId: true,
-  place: { select: { name: true } },
+  closesOn: true,
   settledOptionId: true,
   createdById: true,
   createdBy: { select: { name: true } },
@@ -379,11 +368,11 @@ const POLL_SELECT = {
   options: {
     // `sortOrder` here and again in `sortOptions`: the query gives the rows a stable order, and
     // the pure sort makes that order total. Neither alone is enough.
-    orderBy: [{ sortOrder: "asc" }, { startsOn: "asc" }, { id: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
       id: true,
-      startsOn: true,
-      endsOn: true,
+      label: true,
+      onDate: true,
       sortOrder: true,
       replies: {
         orderBy: { profileId: "asc" },
@@ -404,16 +393,15 @@ function toBoardPoll(poll: PollRow): BoardPoll {
     id: poll.id,
     title: poll.title,
     status: poll.status,
-    placeId: poll.placeId,
-    placeName: poll.place?.name ?? null,
+    closesOn: calendarDateFromDbDate(poll.closesOn),
     settledOptionId: poll.settledOptionId,
     createdById: poll.createdById,
     createdByName: poll.createdBy?.name ?? null,
     createdAt: poll.createdAt,
     options: poll.options.map((option) => ({
       optionId: option.id,
-      startsOn: calendarDateFromDbDate(option.startsOn),
-      endsOn: calendarDateFromDbDate(option.endsOn),
+      label: option.label,
+      onDate: option.onDate ? calendarDateFromDbDate(option.onDate) : null,
       sortOrder: option.sortOrder,
       replies: option.replies.map((reply) => ({
         optionId: option.id,

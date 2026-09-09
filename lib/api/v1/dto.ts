@@ -16,14 +16,18 @@
  *    whatever the database happened to look like. `lib/api/v1/serialize.ts` is where the two meet,
  *    and it is the place a breaking change becomes visible instead of silent.
  *
- * Anything added here is a promise to a binary you no longer control. Add optional fields; do not
- * repurpose existing ones.
+ * **Additive only from the first App Store release.** Until then this file has been rewritten
+ * outright once — retiring places and stays for presence — because every install was an internal
+ * build and the audience was a text message. That was the last cheap moment, and it is worth
+ * naming rather than leaving the rule looking absolute and then quietly broken: after the first
+ * public release, add optional fields and do not repurpose existing ones, because there will be
+ * somebody on last month's build and no way to reach them.
  */
 
 /**
  * A calendar date as `YYYY-MM-DD`.
  *
- * The board is date-based, never instant-based: a stay covers days, not moments. The web brands
+ * The board is date-based, never instant-based: a run covers days, not moments. The web brands
  * this type in `lib/dates.ts`; here it is a plain string because this file cannot import that
  * brand — the shape on the wire is identical either way.
  *
@@ -34,12 +38,6 @@ export type CalendarDateString = string;
 
 /** Mirrors the `FamilyRole` enum in schema.prisma. */
 export type FamilyRoleDto = "PARENT" | "KID";
-
-export interface PlaceDto {
-  id: string;
-  name: string;
-  isHome: boolean;
-}
 
 export interface MemberDto {
   profileId: string;
@@ -57,28 +55,93 @@ export interface MeDto {
   role: FamilyRoleDto;
 }
 
-/** Where one person is today. */
+/**
+ * Whether somebody will be with the family, on a stretch of days.
+ *
+ * AROUND means "I'll be there" — not "at home", and not "free". The whole gathering countdown
+ * rests on that reading; see the enum comment in `schema.prisma`.
+ */
+export type PresenceStateDto = "AROUND" | "AWAY";
+
+/** Where one person stands today. */
 export interface PresenceDto {
   profileId: string;
   name: string;
-  /** Null means nothing is recorded — which is not the same as being at home. */
-  place: PlaceDto | null;
-  /** Last day at that place; null for an open-ended stay, or when nothing is recorded. */
+  /** Null means nothing has been said about today — which is not the same as being away. */
+  state: PresenceStateDto | null;
+  /** Last day the current run holds; null when it is open-ended, or when nothing is said. */
   until: CalendarDateString | null;
+  /** The run's own note — "Vanguard", "work trip" — when it carries one. */
+  note: string | null;
   /** Where to fetch this person's avatar — see the note at the foot of this file. */
   avatarPath?: string;
 }
 
-/** The next day everyone is in the same place. */
+/** The next day everybody is around. */
 export interface GatheringDto {
   date: CalendarDateString;
-  place: PlaceDto;
   /** Zero when it is today. */
   inDays: number;
 }
 
 /**
+ * One person's fortnight, as cells: the board's resting state.
+ *
+ * `days` runs from `BoardDto.today` forward, one entry per day, and its length is
+ * `BoardDto.gridDays.length` — the dates are sent alongside rather than recomputed, so a client
+ * never has to do calendar arithmetic to label a column.
+ *
+ * Null is *unsaid*, and is drawn as a gap rather than as a third state. It is the absence of a
+ * statement, not a statement of absence.
+ */
+/** One day in the fortnight, for one person. */
+export interface GridCellDto {
+  /** Null is *unsaid*, drawn as a gap rather than as a third kind of mark. */
+  state: PresenceStateDto | null;
+  /**
+   * The run's note, carried per cell rather than per person.
+   *
+   * The board only draws the one covering today, so this looks redundant — it is here for undo.
+   * Painting over a day deletes the statement that was there, note and all, and an undo that
+   * restored the state but dropped the reason would lose the only writing anybody does.
+   */
+  note: string | null;
+}
+
+/**
+ * How far ahead somebody has spoken, counting from today.
+ *
+ * Three cases rather than a date that is sometimes missing, because "said nothing" and "said, with
+ * no end date" are opposite facts and a nullable date cannot tell them apart.
+ */
+export type HorizonDto =
+  | { kind: "unsaid" }
+  | { kind: "through"; date: CalendarDateString }
+  | { kind: "open" };
+
+export interface GridRowDto {
+  profileId: string;
+  name: string;
+  /** Where to fetch this person's avatar — see the note at the foot of this file. */
+  avatarPath?: string;
+  days: GridCellDto[];
+  horizon: HorizonDto;
+  /**
+   * Whether the viewer may say things on this person's behalf.
+   *
+   * Decided by the server from `canEditProfile`, not re-derived from roles by each client: a row a
+   * client offered to edit and the server then refused is worse than one it never offered.
+   */
+  editable: boolean;
+}
+
+/**
  * One line of the agenda, with ids already resolved to names.
+ *
+ * Birthdays and one-off dates, and nothing else. Arrivals and departures used to be here too, and
+ * that is what made the section unreadable: a weekend everyone is home produced five near-identical
+ * lines saying what `grid` already shows at a glance. What is left is the part the grid cannot
+ * show.
  *
  * Resolving server-side rather than shipping lookup tables: the server holds the data anyway, and
  * the alternative is every client reimplementing the same join. Dates stay as calendar dates
@@ -86,13 +149,6 @@ export interface GatheringDto {
  * but *which day it is* is a fact, and that belongs to the server.
  */
 export type AgendaEntryDto =
-  | {
-      kind: "arrival" | "departure";
-      date: CalendarDateString;
-      profileId: string;
-      personName: string;
-      placeName: string;
-    }
   | {
       kind: "birthday";
       date: CalendarDateString;
@@ -125,9 +181,32 @@ export interface AwaitingPollDto {
 export interface BoardDto {
   /** The family's today, authoritative. */
   today: CalendarDateString;
+  /**
+   * Which of the five people is asking.
+   *
+   * The board is the most-read screen in the app and it was the only one that did not know. Every
+   * read therefore began with the same manual step — find my own name among five, then find my own
+   * row — while every other surface goes to real trouble to say "you" instead of "Brandon".
+   */
+  viewerProfileId: string;
   awaiting: AwaitingPollDto[];
   gathering: GatheringDto | null;
+  /**
+   * Who the countdown is waiting on: everyone who has said nothing about today.
+   *
+   * `gathering` is null whenever this is non-empty, and that is the point of sending both. The
+   * countdown declines while anybody is unsaid — silence is never a yes — but declining without
+   * saying why is how the board ended up with a headline that never said anything.
+   *
+   * Ids as well as names, unlike the tally arrays on a poll. Those answer "who said yes", which a
+   * name answers perfectly well; this one has to be able to say **you**, and a client holding
+   * names alone cannot tell which of the five it is looking at.
+   */
+  unsaid: { profileId: string; name: string }[];
   presence: PresenceDto[];
+  /** The dates `GridRowDto.days` is indexed by, in order, starting at `today`. */
+  gridDays: CalendarDateString[];
+  grid: GridRowDto[];
   agenda: AgendaEntryDto[];
   /** How many days ahead `agenda` looks, so the client can label the section honestly. */
   agendaWindowDays: number;
@@ -157,47 +236,26 @@ export interface ApiErrorBody {
   };
 }
 
-// --- Stays -------------------------------------------------------------------
-
-/** One recorded stay: a person at a place, over a range of days. */
-export interface StayDto {
-  id: string;
-  profileId: string;
-  place: PlaceDto;
-  startsOn: CalendarDateString;
-  /** The last day *at* the place. Null means open-ended — "from then on". */
-  endsOn: CalendarDateString | null;
-  note: string | null;
-}
-
-/** One person's stays, as the editor lists them. */
-export interface StayListDto {
-  profileId: string;
-  name: string;
-  /** Where to fetch this person's avatar — see the note at the foot of this file. */
-  avatarPath?: string;
-  stays: StayDto[];
-}
+// --- Presence ----------------------------------------------------------------
 
 /**
- * Everything the "Where I am" screen needs.
+ * The body of `PUT /api/v1/presence`.
  *
- * `lists` holds only the people the viewer may edit — themselves, or everyone if they are a
- * parent — because the screen exists to change things, and listing rows that would be refused is
- * an invitation to be refused. The server decides this; the client does not filter.
+ * `days` is a list rather than a first-and-last pair. The strip is a fortnight of individually
+ * tappable cells, so a selection is often not contiguous — "Friday, Saturday and the Tuesday
+ * after" is one act. The server collapses them into runs when it writes, so the storage stays a
+ * range and a weekend is still one row.
+ *
+ * `state: null` clears the days, returning them to unsaid rather than recording an away — the same
+ * shape as `ReplyInputDto`, where null clears an answer rather than recording a no.
+ *
+ * Open-ended presence ("at school until I say otherwise") has no representation here, and cannot:
+ * a list of days always has a last one. The model holds it and nothing yet writes one.
  */
-export interface WhereDto {
-  today: CalendarDateString;
-  places: PlaceDto[];
-  lists: StayListDto[];
-}
-
-/** The body of `POST /api/v1/stays` and `PATCH /api/v1/stays/:id`. */
-export interface StayInputDto {
+export interface PresenceInputDto {
   profileId: string;
-  placeId: string;
-  startsOn: CalendarDateString;
-  endsOn: CalendarDateString | null;
+  state: PresenceStateDto | null;
+  days: CalendarDateString[];
   note: string | null;
 }
 
@@ -223,25 +281,31 @@ export interface PollMemberDto {
 }
 
 /**
- * One date option on a poll, already tallied.
+ * One option on an ask, already tallied.
+ *
+ * Exactly one of `label` and `onDate` carries what the option says, and which one it is says what
+ * kind of question this is: "tacos" is a choice, the 19th of September is a day. `label` is null
+ * when the date is the whole of it, and the client renders `label ?? format(onDate)` — the format
+ * stays on the client because a date written into the database at creation is a display format
+ * frozen as data.
  *
  * Names rather than profile ids, for the same reason the agenda resolves its own: the server holds
  * the roster, and shipping it so every client can perform the same join is work done twice to
  * reach one answer.
  *
  * `silentNames` is who has not answered *this* option. Deliberately not folded into `no` — silence
- * is not a refusal, and a tally that treated it as one would settle dates nobody agreed to.
+ * is not a refusal, and a tally that treated it as one would settle on things nobody agreed to.
  */
 export interface PollOptionDto {
   id: string;
-  startsOn: CalendarDateString;
-  endsOn: CalendarDateString;
+  label: string | null;
+  onDate: CalendarDateString | null;
   yesNames: string[];
   maybeNames: string[];
   noNames: string[];
   silentNames: string[];
   /** Every single person said yes — not merely that nobody said no. */
-  everyoneCanMake: boolean;
+  unanimous: boolean;
   /** The viewer's own answer to this option, or null if they have not given one. */
   myReply: ReplyKindDto | null;
   /** True when the poll settled on this option. */
@@ -260,8 +324,13 @@ export interface PollDto {
   id: string;
   title: string;
   status: PollStatusDto;
-  /** Where the gathering is. Null means home, resolved when the poll settles. */
-  placeName: string | null;
+  /**
+   * The last day this keeps asking.
+   *
+   * Sent because the client separates open asks from past ones, and it can no longer work that out
+   * from the options: a question whose choices are "tacos" and "pizza" has no date to have passed.
+   */
+  closesOn: CalendarDateString;
   /** Who asked, or null when that is the viewer themselves — see `AwaitingPollDto`. */
   askedByName: string | null;
   /** True while any option is still waiting on the viewer. */

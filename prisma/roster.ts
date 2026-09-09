@@ -14,10 +14,6 @@ import { prisma } from "@/lib/prisma";
  * Both entry points depend on that; keep it true.
  */
 
-/** Place names, used as the join key: `Place.name` is unique, so it is a stable handle. */
-export const HOME = "Home";
-export const VANGUARD = "Vanguard";
-
 /**
  * The family.
  *
@@ -32,8 +28,8 @@ export const VANGUARD = "Vanguard";
  * Each address must also appear in `FAMILY_EMAILS` or that person cannot sign in. The allowlist is
  * checked before any mail goes out, and a seeded account is not itself permission to enter.
  *
- * Nobody is seeded with a location. Where a person is comes from a stay they recorded or a poll
- * they said yes to, never from a fact this file asserts on their behalf.
+ * Nobody is seeded as around or away. Whether a person will be with the family comes from a run
+ * they painted onto their own strip, never from a fact this file asserts on their behalf.
  */
 export const FAMILY = [
   {
@@ -77,32 +73,6 @@ export const FAMILY = [
     birthday: "2011-08-23",
   },
 ];
-
-/**
- * The places the family reckons from.
- *
- * `Place.isHome` is what the board leans on to tell "at home" from "away", and the schema asks for
- * exactly one row carrying it — so it is written here rather than left to be created by hand.
- *
- * Vanguard is written alongside it because it is the other place this family reckons from, and a
- * place has to exist before anyone can record a stay at it. Both are upserts keyed on `name`,
- * which is unique.
- */
-export async function provisionPlaces(): Promise<Map<string, string>> {
-  const places = await Promise.all([
-    prisma.place.upsert({
-      where: { name: HOME },
-      update: {},
-      create: { name: HOME, isHome: true },
-    }),
-    prisma.place.upsert({
-      where: { name: VANGUARD },
-      update: {},
-      create: { name: VANGUARD, address: "Vanguard University, Costa Mesa" },
-    }),
-  ]);
-  return new Map(places.map((place) => [place.name, place.id]));
-}
 
 /**
  * Accounts are written with Prisma rather than through Better Auth because there is no password

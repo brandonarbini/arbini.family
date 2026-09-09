@@ -1,16 +1,16 @@
 import { PollForm } from "@/app/polls/new/poll-form";
 import { requireProfile } from "@/lib/auth-helpers";
-import { getPlaces, getPoll } from "@/lib/board/data";
+import { getPoll } from "@/lib/board/data";
 import { addCalendarDays, todayInFamilyTz } from "@/lib/dates";
 
-export const metadata = { title: "Start a poll — Arbini Family" };
+export const metadata = { title: "Ask the family — Arbini Family" };
 
 /**
- * Starting a poll.
+ * Asking the family something.
  *
- * No permission check beyond having a profile. Anyone in the family may ask — Macy wanting to
- * know who is around on Saturday is the same act as Brandon wanting to know, and a poll only the
- * parents can start is a poll that only gets started when a parent thinks of it.
+ * No permission check beyond having a profile. Anyone in the family may ask — Macy wanting to know
+ * what is for dinner is the same act as Brandon wanting to know, and an ask only the parents can
+ * start is an ask that only gets started when a parent thinks of it.
  */
 export default async function NewPollPage({
   searchParams,
@@ -21,39 +21,36 @@ export default async function NewPollPage({
   const { from } = await searchParams;
   const today = todayInFamilyTz();
 
-  // "Ask again": last week's poll shifted forward seven days. The recurring question in a family
-  // where somebody is away at school is the same question every week, and re-typing it every
-  // Sunday is exactly the friction that ends the habit.
-  const [places, previous] = await Promise.all([
-    getPlaces(),
-    from ? getPoll(from) : null,
-  ]);
+  // "Ask again": last week's question, carried forward. The recurring ask in a family is the same
+  // ask every week, and re-typing it every Sunday is exactly the friction that ends the habit.
+  //
+  // A dated option shifts seven days, because "which weekend?" means the *next* weekend. A choice
+  // does not: "tacos" a week later is still tacos, and shifting it would be nonsense.
+  const previous = from ? await getPoll(from) : null;
   const repeated = previous?.options
     .map((option) => ({
-      startsOn: addCalendarDays(option.startsOn, 7),
-      endsOn: addCalendarDays(option.endsOn, 7),
+      label: option.label,
+      onDate: option.onDate ? addCalendarDays(option.onDate, 7) : null,
     }))
-    // A shifted option that has already passed is dropped rather than offered.
-    .filter((option) => option.endsOn >= today);
+    // A shifted date that has already passed is dropped rather than offered.
+    .filter((option) => option.onDate === null || option.onDate >= today);
 
   return (
     <div>
       <div className="mb-10">
         <h1 className="font-headline text-4xl">
-          {previous ? "Ask again" : "Start a poll"}
+          {previous ? "Ask again" : "Ask the family"}
         </h1>
         <p className="font-copy mt-2 text-base text-muted-foreground">
           {previous
             ? "Same question, next week. Change anything that should be different."
-            : "Pick a few days and send everyone the link."}
+            : "A question, a few answers to choose from, and a link to send round."}
         </p>
       </div>
 
       <PollForm
         today={today}
-        places={places}
         defaultTitle={previous?.title}
-        defaultPlaceId={previous?.placeId}
         defaultOptions={repeated}
       />
     </div>

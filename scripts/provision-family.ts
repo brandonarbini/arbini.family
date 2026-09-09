@@ -1,6 +1,6 @@
 import { env } from "@/lib/env/server";
 import { prisma } from "@/lib/prisma";
-import { FAMILY, provisionFamily, provisionPlaces } from "@/prisma/roster";
+import { FAMILY, provisionFamily } from "@/prisma/roster";
 
 /**
  * Writes the family roster into a real database. The production counterpart to `prisma/db:seed`.
@@ -47,11 +47,8 @@ async function main() {
     return;
   }
 
-  const placeIds = await provisionPlaces();
   await provisionFamily();
-  console.log(
-    `Provisioned ${FAMILY.length} family member(s) and ${placeIds.size} place(s) into ${target}: ${[...placeIds.keys()].join(", ")}.`,
-  );
+  console.log(`Provisioned ${FAMILY.length} family member(s) into ${target}.`);
 }
 
 main()

@@ -6,7 +6,7 @@ import { type BoardPoll, getFamilyMembers, getPolls } from "@/lib/board/data";
 import { tallyPoll } from "@/lib/polls/tally";
 import { formatCalendarDate, todayInFamilyTz } from "@/lib/dates";
 
-export const metadata = { title: "Polls — Arbini Family" };
+export const metadata = { title: "Asks — Arbini Family" };
 
 export default async function PollsPage() {
   const actor = await requireProfile("/polls");
@@ -14,11 +14,10 @@ export default async function PollsPage() {
   const [polls, members] = await Promise.all([getPolls(), getFamilyMembers()]);
   const profileIds = members.map((member) => member.profileId);
 
-  // "Open" is derived from the dates rather than stored, so a poll whose days have passed drops
-  // off the list on its own. A stored lifecycle would need something to come along and close it,
-  // and nothing does.
-  const isLive = (poll: BoardPoll) =>
-    poll.options.some((option) => option.endsOn >= today);
+  // "Open" is `closesOn`, written at creation. It used to be derived from the option dates — an
+  // ask whose days had passed dropped off the list on its own — and that stopped working the
+  // moment an option could be "tacos". A question with no date in it still has to stop asking.
+  const isLive = (poll: BoardPoll) => poll.closesOn >= today;
   const open = polls.filter(isLive);
   const past = polls.filter((poll) => !isLive(poll));
 
@@ -26,24 +25,21 @@ export default async function PollsPage() {
     <div>
       <div className="mb-10 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-headline text-4xl">Polls</h1>
+          <h1 className="font-headline text-4xl">Asks</h1>
           <p className="font-copy mt-2 text-base text-muted-foreground">
-            Ask a few dates, send the link, see who can make it.
+            A question, a few answers to choose from, and a link to send round.
           </p>
         </div>
         <Button asChild>
-          <Link href="/polls/new">Start a poll</Link>
+          <Link href="/polls/new">Ask the family</Link>
         </Button>
       </div>
 
       <Section title="Open">
         {open.length === 0 ? (
           <p className="font-copy text-base text-muted-foreground">
-            Nothing open.{" "}
-            <Link href="/polls/new" className="underline underline-offset-4">
-              Ask about a few days
-            </Link>
-            .
+            {/* One call to action, not two — "Ask the family" is a filled button 100px above. */}
+            Nothing open.
           </p>
         ) : (
           <RuledList>
@@ -60,7 +56,7 @@ export default async function PollsPage() {
       </Section>
 
       {past.length > 0 ? (
-        <Section title="Past">
+        <Section title="Answered and closed">
           <RuledList>
             {past.map((poll) => (
               <PollRow
@@ -107,8 +103,8 @@ function PollRow({
           </span>
           <span className="font-copy block text-sm text-muted-foreground">
             {settled
-              ? `Settled — ${formatCalendarDate(settled.startsOn, "EEE d MMM")}`
-              : `${poll.options.length} date${poll.options.length === 1 ? "" : "s"}`}
+              ? `Settled — ${settled.label ?? formatCalendarDate(settled.onDate!, "EEE d MMM")}`
+              : `${poll.options.length} choice${poll.options.length === 1 ? "" : "s"}`}
             {poll.createdByName ? ` · ${poll.createdByName.split(" ")[0]}` : ""}
           </span>
         </span>

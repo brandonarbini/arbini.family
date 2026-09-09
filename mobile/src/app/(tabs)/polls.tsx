@@ -1,43 +1,34 @@
 import type { PollDto, PollMemberDto, PollOptionDto, ReplyKindDto } from '@server/api/v1/dto';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { LoadFailure } from '@/components/load-failure';
 import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, RuledList, Section } from '@/components/section';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import { formatShortDay } from '@/lib/dates';
 import { useAnswerPoll, useMe, usePolls } from '@/lib/queries';
 
 /**
- * The ballots: what has been asked, and what you said.
+ * The asks: what the family has been asked, and what you said.
  *
  * Answering is the whole point of this screen on a phone — asking is a desk job, and settling is
  * a decision somebody makes once. Both stay on the web until there is a reason to move them.
  */
 export default function PollsScreen() {
-  const { data, isPending, error, refetch, isRefetching } = usePolls();
+  const { data, isPending, error, refetch } = usePolls();
+  const pull = usePullToRefresh(refetch);
 
   if (isPending) return <Page dateline="Loading">{null}</Page>;
 
-  if (error) {
-    return (
-      <Page dateline="Not loaded">
-        <Section title="Polls">
-          <Copy muted>
-            {error instanceof ApiError
-              ? error.message
-              : 'Could not reach the board. It may be the network.'}
-          </Copy>
-        </Section>
-      </Page>
-    );
-  }
+  if (error) return <LoadFailure title="Asks" error={error} onRetry={refetch} />;
 
   if (data.length === 0) {
     return (
-      <Page dateline="Polls">
+      <Page dateline="Asks">
         <Section title="Nothing asked">
           <Copy muted>
             When somebody asks the family a question, it turns up here. Start one on the website.
@@ -52,10 +43,7 @@ export default function PollsScreen() {
   const ordered = [...data].sort((a, b) => Number(b.awaitingYou) - Number(a.awaitingYou));
 
   return (
-    <Page
-      dateline="Polls"
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-    >
+    <Page dateline="Asks" refreshControl={<RefreshControl {...pull} />}>
       {ordered.map((poll) => (
         <Poll key={poll.id} poll={poll} />
       ))}
@@ -69,9 +57,9 @@ function Poll({ poll }: { poll: PollDto }) {
   return (
     <Section title={poll.title}>
       <Copy muted style={styles.subhead}>
-        {settled ? 'Settled' : poll.awaitingYou ? 'Waiting on you' : 'Answered'}
+        {/* "You've answered" — "Answered" was a claim about the ask, printed when only you had. */}
+        {settled ? 'Settled' : poll.awaitingYou ? 'Waiting on you' : 'You’ve answered'}
         {poll.askedByName ? ` · asked by ${poll.askedByName.split(' ')[0]}` : ''}
-        {poll.placeName ? ` · at ${poll.placeName}` : ''}
       </Copy>
 
       <RuledList>
@@ -87,8 +75,13 @@ function Poll({ poll }: { poll: PollDto }) {
       </RuledList>
 
       {settled ? (
+        // Only a *dated* answer reaches the board — the agenda is a list of dates, and a family
+        // that settled on tacos has not settled on a date. Saying "the board has been updated"
+        // either way was true when settling wrote a stay per yes, and is a small lie now.
         <Copy muted style={styles.locked}>
-          The answer is in — the board has been updated to match.
+          {poll.options.some((option) => option.isSettled && option.onDate)
+            ? 'The answer is in, and it’s on the board.'
+            : 'The answer is in.'}
         </Copy>
       ) : null}
     </Section>
@@ -128,21 +121,21 @@ function Option({
     .map((name) => (me && name === me.name ? 'you' : name.split(' ')[0]))
     .sort((a, b) => (a === 'you' ? -1 : b === 'you' ? 1 : 0));
 
-  const dates =
-    option.startsOn === option.endsOn
-      ? formatShortDay(option.startsOn)
-      : `${formatShortDay(option.startsOn)} – ${formatShortDay(option.endsOn)}`;
+  // The date is formatted here rather than read off a column. Writing "19 Sep" into the database
+  // at creation would be a display format stored as data, which is the thing `lib/dates.ts` exists
+  // to prevent — and it would leave an ask made last year rendering in last year's format.
+  const says = option.label ?? formatShortDay(option.onDate!);
 
   return (
     <View>
       <View style={styles.optionHead}>
-        <Copy style={styles.dates}>{dates}</Copy>
+        <Copy style={styles.says}>{says}</Copy>
         {option.isSettled ? (
           <Text style={[styles.chosen, { color: theme.success, borderColor: theme.success }]}>
             CHOSEN
           </Text>
-        ) : option.everyoneCanMake ? (
-          // Not "nobody said no": silence is not consent, and a date declared possible because
+        ) : option.unanimous ? (
+          // Not "nobody said no": silence is not consent, and an answer declared agreed because
           // three people ignored it would be wrong in the way that matters most.
           <Text style={[styles.chosen, { color: theme.success, borderColor: theme.success }]}>
             ALL YES
@@ -248,7 +241,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dates: {
+  says: {
     fontSize: 18,
   },
   chosen: {

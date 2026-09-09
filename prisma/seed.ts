@@ -1,6 +1,6 @@
 import { env } from "@/lib/env/server";
 import { prisma } from "@/lib/prisma";
-import { FAMILY, provisionFamily, provisionPlaces } from "./roster";
+import { FAMILY, provisionFamily } from "./roster";
 
 /**
  * Development seed. The roster and the writes live in `prisma/roster.ts`; this file is only the
@@ -24,11 +24,8 @@ function assertNotProduction(): void {
 
 async function main() {
   assertNotProduction();
-  const placeIds = await provisionPlaces();
   await provisionFamily();
-  console.log(
-    `Seeded ${FAMILY.length} family member(s) and ${placeIds.size} place(s): ${[...placeIds.keys()].join(", ")}.`,
-  );
+  console.log(`Seeded ${FAMILY.length} family member(s).`);
 }
 
 main()

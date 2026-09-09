@@ -8,8 +8,8 @@ import { prisma } from "@/lib/prisma";
 /**
  * Answering a poll from the app, against a real database.
  *
- * The rule under test is deliberately stricter than the stay editor's: a parent may fix anybody's
- * travel dates, but nobody answers a poll in somebody else's voice.
+ * The rule under test is deliberately stricter than the Around strip's: a parent may paint
+ * anybody's days, but nobody answers a poll in somebody else's voice.
  */
 
 async function makeProfile(name: string, role: FamilyRole = FamilyRole.KID) {
@@ -27,13 +27,13 @@ async function makeProfile(name: string, role: FamilyRole = FamilyRole.KID) {
 
 async function makePoll(createdById: string | null = null) {
   return createPoll({
-    title: "Thursday or Saturday?",
-    placeId: null,
+    title: "What's for dinner?",
     createdById,
     options: [
-      { startsOn: "2099-12-03", endsOn: "2099-12-03" },
-      { startsOn: "2099-12-05", endsOn: "2099-12-05" },
+      { label: "Tacos", onDate: null },
+      { label: "Pizza", onDate: null },
     ],
+    today: "2099-12-01",
   });
 }
 

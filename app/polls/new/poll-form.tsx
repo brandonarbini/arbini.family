@@ -1,259 +1,209 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { startPoll } from "@/app/polls/actions";
-import { MAX_OPTIONS } from "@/app/polls/validations";
+import { MAX_OPTIONS, MAX_OPTION_LABEL } from "@/app/polls/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  addCalendarDays,
-  differenceInCalendarDays,
-  formatCalendarDate,
-} from "@/lib/dates";
+import { addCalendarDays, formatCalendarDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 /**
- * Starting a poll, in about fifteen seconds.
+ * Asking the family something, in about fifteen seconds.
  *
  * That budget is the whole design constraint. This gets used weekly, and anything that takes a
- * minute gets used once — so the common case is a title and a few taps on a strip of days, with
- * no date pickers, no time fields and no deadline to think about.
+ * minute gets used once — so the common case is a question and a few options typed straight in.
  *
- * Days are single-day options (`startsOn === endsOn`, matching `Stay`'s inclusive convention).
- * The range inputs underneath cover the rare holiday-week case with the same shape, and stay
- * folded away so they cost nothing to ignore.
+ * Two ways to add an option, because there are two kinds of question and they want different
+ * controls. "What's for dinner?" wants a text field. "Which weekend?" wants a strip of tappable
+ * days, which is fewer taps than typing three dates and cannot produce a date that does not exist.
+ * An ask may mix them; nothing stops "Friday", "Saturday" and "whenever suits" on one ballot.
+ *
+ * The days used to be the *only* way, because settling wrote a stay and a stay needs a day. It
+ * does not any more, and most of what a family asks each other is not about a day at all.
  */
 
-/**
- * Two weeks is the useful default, but the strip stretches to cover anything already selected.
- *
- * "Ask again" shifts last week's dates forward seven days, which can push one past a fixed
- * window — and a selected day the strip does not render is a date that gets submitted while
- * being invisible and impossible to un-select. Growing the strip is what keeps "what is selected"
- * and "what is shown" the same set.
- */
-const MIN_STRIP_DAYS = 14;
+/** Two weeks of days on offer, which is as far ahead as anybody picks a weekend. */
+const STRIP_DAYS = 14;
+
+type Draft = { key: string; label: string | null; onDate: string | null };
 
 export function PollForm({
   today,
-  places,
   defaultTitle,
-  defaultPlaceId,
   defaultOptions,
 }: {
   today: string;
-  places: { id: string; name: string; isHome: boolean }[];
   defaultTitle?: string;
-  defaultPlaceId?: string | null;
-  /** Pre-selected options, used by "Ask again" to shift last week's poll forward intact. */
-  defaultOptions?: { startsOn: string; endsOn: string }[];
+  /** Pre-filled options, used by "Ask again" to carry last week's question forward. */
+  defaultOptions?: { label: string | null; onDate: string | null }[];
 }) {
   const [state, formAction, pending] = useActionState(startPoll, null);
-  const [picked, setPicked] = useState<string[]>(
-    (defaultOptions ?? [])
-      .filter((option) => option.startsOn === option.endsOn)
-      .map((option) => option.startsOn),
-  );
-  const [ranges, setRanges] = useState<{ startsOn: string; endsOn: string }[]>(
-    (defaultOptions ?? []).filter(
-      (option) => option.startsOn !== option.endsOn,
-    ),
-  );
-  const [rangeOpen, setRangeOpen] = useState(false);
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
 
-  const furthest = picked.reduce(
-    (max, day) => Math.max(max, differenceInCalendarDays(today, day) + 1),
-    MIN_STRIP_DAYS,
+  const [drafts, setDrafts] = useState<Draft[]>(() =>
+    (defaultOptions ?? []).map((option, index) => ({
+      key: `seed-${index}`,
+      label: option.label,
+      onDate: option.onDate,
+    })),
   );
-  const days = Array.from({ length: furthest }, (_, offset) =>
+  const [typed, setTyped] = useState("");
+
+  const full = drafts.length >= MAX_OPTIONS;
+  const days = Array.from({ length: STRIP_DAYS }, (_, offset) =>
     addCalendarDays(today, offset),
   );
-  const options = [
-    ...picked.map((day) => ({ startsOn: day, endsOn: day })),
-    ...ranges,
-  ].sort((a, b) => a.startsOn.localeCompare(b.startsOn));
-  const full = options.length >= MAX_OPTIONS;
+  const pickedDates = new Set(
+    drafts.map((draft) => draft.onDate).filter(Boolean),
+  );
+
+  function addLabel() {
+    const label = typed.trim();
+    if (!label || full) return;
+    setDrafts((current) => [
+      ...current,
+      { key: `label-${Date.now()}`, label, onDate: null },
+    ]);
+    setTyped("");
+  }
+
+  function toggleDate(date: string) {
+    setDrafts((current) =>
+      current.some((draft) => draft.onDate === date)
+        ? current.filter((draft) => draft.onDate !== date)
+        : full
+          ? current
+          : [...current, { key: `date-${date}`, label: null, onDate: date }],
+    );
+  }
 
   return (
     <form action={formAction} className="space-y-8">
       <div>
-        <Label htmlFor="title">What are you asking about?</Label>
+        <Label htmlFor="title">What are you asking?</Label>
         <Input
           id="title"
           name="title"
           defaultValue={defaultTitle}
-          placeholder="Dinner together"
+          placeholder="What's for dinner Friday?"
           maxLength={80}
           required
           autoFocus={!defaultTitle}
           aria-invalid={Boolean(fieldError(state, "title"))}
-          className="mt-1.5"
+          className="mt-1.5 placeholder:text-muted-foreground/50"
         />
         <FieldError message={fieldError(state, "title")} />
       </div>
 
-      {/*
-        Optional, and last in the tab order before the days, because the answer is "home" almost
-        every time. It exists because settling writes a stay, and a stay needs somewhere to be —
-        a "Beach day?" poll that quietly recorded everyone at home would be worse than useless.
-      */}
-      {places.length > 1 ? (
-        <div>
-          <Label htmlFor="placeId">Where?</Label>
-          <select
-            id="placeId"
-            name="placeId"
-            defaultValue={defaultPlaceId ?? ""}
-            className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Home</option>
-            {places
-              .filter((place) => !place.isHome)
-              .map((place) => (
-                <option key={place.id} value={place.id}>
-                  {place.name}
-                </option>
-              ))}
-          </select>
-        </div>
-      ) : null}
-
       <div>
-        <span className="text-sm font-medium">Which days?</span>
+        <span className="text-sm font-medium">The choices</span>
         <p className="font-copy mt-0.5 text-sm text-muted-foreground">
-          Tap up to {MAX_OPTIONS}. More than that and nobody fills it in.
+          Up to {MAX_OPTIONS}. More than that and nobody fills it in.
         </p>
-        <div className="mt-3 grid grid-cols-7 gap-1.5">
+
+        {drafts.length > 0 ? (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {drafts.map((draft) => (
+              <li key={draft.key}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDrafts((current) =>
+                      current.filter((one) => one.key !== draft.key),
+                    )
+                  }
+                  className="font-copy flex items-center gap-2 rounded-md border border-foreground px-3 py-1.5 text-sm"
+                >
+                  {draft.label ??
+                    formatCalendarDate(draft.onDate!, "EEE d MMM")}
+                  <X className="size-3.5 text-muted-foreground" aria-hidden />
+                  <span className="sr-only">Remove</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <div className="mt-3 flex gap-2">
+          <Input
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            // Enter adds an option instead of submitting the form. Submitting on Enter with a
+            // half-typed choice still in the box is how you lose the one you were adding.
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              addLabel();
+            }}
+            maxLength={MAX_OPTION_LABEL}
+            disabled={full}
+            placeholder="Tacos"
+            aria-label="Add a choice"
+            className="placeholder:text-muted-foreground/50"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addLabel}
+            disabled={full || typed.trim().length === 0}
+          >
+            Add
+          </Button>
+        </div>
+        <FieldError message={fieldError(state, "options")} />
+
+        <p className="font-copy mt-6 text-sm text-muted-foreground">
+          Or tap the days you&rsquo;re asking about.
+        </p>
+        {/* Seven to a row, so a column is a weekday — the same shape as the Around strip. */}
+        <div className="mt-2 grid grid-cols-7 gap-2">
           {days.map((day) => {
-            const on = picked.includes(day);
+            const on = pickedDates.has(day);
             return (
               <button
                 key={day}
                 type="button"
                 aria-pressed={on}
                 // A day already chosen stays tappable so it can be un-chosen; only *new* taps are
-                // blocked once the poll is full.
+                // blocked once the ask is full.
                 disabled={!on && full}
-                onClick={() =>
-                  setPicked((current) =>
-                    current.includes(day)
-                      ? current.filter((d) => d !== day)
-                      : [...current, day],
-                  )
-                }
-                className={cn(
-                  "touch-manipulation select-none rounded-md border py-2 text-center transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:opacity-30",
-                  on
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-input hover:bg-accent",
-                )}
+                onClick={() => toggleDate(day)}
+                className="group flex flex-col items-center gap-1 focus-visible:outline-none disabled:opacity-30"
               >
-                <span className="block text-[0.625rem] uppercase tracking-wider opacity-70">
+                <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
                   {formatCalendarDate(day, "EEEEE")}
                 </span>
-                <span className="block text-sm tabular-nums">
+                <span
+                  className={cn(
+                    "flex aspect-square w-full max-w-11 items-center justify-center rounded-full border text-sm tabular-nums transition-colors",
+                    "group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
+                    on
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-dashed border-input text-muted-foreground",
+                  )}
+                >
                   {formatCalendarDate(day, "d")}
                 </span>
               </button>
             );
           })}
         </div>
-        <FieldError message={fieldError(state, "options")} />
       </div>
 
-      {/* Every chosen option, single days and ranges alike, as the fields actually submitted. */}
-      {options.map((option) => (
+      {/*
+        Every option as the field actually submitted. A leading `@` marks a date — see
+        `optionField` in `validations.ts` for why one field carries both.
+      */}
+      {drafts.map((draft) => (
         <input
-          key={`${option.startsOn}:${option.endsOn}`}
+          key={draft.key}
           type="hidden"
           name="option"
-          value={`${option.startsOn}:${option.endsOn}`}
+          value={draft.onDate ? `@${draft.onDate}` : draft.label!}
         />
       ))}
-
-      <div>
-        {rangeOpen ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label htmlFor="rangeStart">From</Label>
-              <Input
-                id="rangeStart"
-                type="date"
-                value={rangeStart}
-                onChange={(event) => setRangeStart(event.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-            <div>
-              <Label htmlFor="rangeEnd">To</Label>
-              <Input
-                id="rangeEnd"
-                type="date"
-                value={rangeEnd}
-                onChange={(event) => setRangeEnd(event.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                !rangeStart || !rangeEnd || rangeEnd < rangeStart || full
-              }
-              onClick={() => {
-                setRanges((current) => [
-                  ...current,
-                  { startsOn: rangeStart, endsOn: rangeEnd },
-                ]);
-                setRangeStart("");
-                setRangeEnd("");
-                setRangeOpen(false);
-              }}
-            >
-              Add
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setRangeOpen(true)}
-            className="font-copy text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-          >
-            + a longer stretch
-          </button>
-        )}
-
-        {ranges.length > 0 ? (
-          <ul className="mt-3 space-y-1">
-            {ranges.map((range, index) => (
-              <li
-                key={`${range.startsOn}:${range.endsOn}`}
-                className="font-copy flex items-center gap-2 text-sm"
-              >
-                {formatCalendarDate(range.startsOn, "EEE d MMM")} –{" "}
-                {formatCalendarDate(range.endsOn, "EEE d MMM")}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRanges((current) =>
-                      current.filter((_, i) => i !== index),
-                    )
-                  }
-                  className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                >
-                  remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
 
       {state && !state.ok && state.formError ? (
         <p role="alert" className="text-sm text-destructive">
@@ -261,9 +211,9 @@ export function PollForm({
         </p>
       ) : null}
 
-      <Button type="submit" disabled={pending || options.length === 0}>
+      <Button type="submit" disabled={pending || drafts.length === 0}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Start the poll
+        Ask the family
       </Button>
     </form>
   );

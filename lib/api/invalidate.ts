@@ -6,7 +6,7 @@ import { BOARD_TAGS } from "@/lib/board/cache";
 /**
  * Cache invalidation for the API routes.
  *
- * The Server Actions in `app/home/where/actions.ts` use `updateTag`, which gives read-your-own-
+ * The Server Actions in `app/home/actions.ts` use `updateTag`, which gives read-your-own-
  * writes: the very next render sees the change. That is not available here — Next's documentation
  * is explicit that `updateTag` "can **only** be called from within Server Actions. It cannot be
  * used in Route Handlers." So these use `revalidateTag`.
@@ -20,8 +20,8 @@ import { BOARD_TAGS } from "@/lib/board/cache";
  *
  * (The single-argument `revalidateTag(tag)` form is deprecated in Next 16.)
  */
-export function invalidateStays(): void {
-  revalidateTag(BOARD_TAGS.stays, { expire: 0 });
+export function invalidatePresence(): void {
+  revalidateTag(BOARD_TAGS.presence, { expire: 0 });
 }
 
 export function invalidatePolls(): void {

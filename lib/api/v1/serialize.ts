@@ -4,27 +4,19 @@ import type {
   AgendaEntryDto,
   AwaitingPollDto,
   BoardDto,
-  CalendarDateString,
   GatheringDto,
+  GridRowDto,
   MeDto,
   PasskeyDto,
-  PlaceDto,
   PollDto,
   PollOptionDto,
   PresenceDto,
   ReplyKindDto,
-  StayDto,
-  WhereDto,
 } from "@/lib/api/v1/dto";
-import type {
-  BoardPoll,
-  BoardStay,
-  FamilyMember,
-  Place,
-} from "@/lib/board/data";
+import type { BoardPoll, FamilyMember } from "@/lib/board/data";
+import { type Actor, canEditProfile } from "@/lib/board/permissions";
 import { avatarPath } from "@/lib/avatars/path";
 import { tallyPoll } from "@/lib/polls/tally";
-import type { EditorData } from "@/lib/board/editor";
 import type { AgendaEntry } from "@/lib/board/agenda";
 import type { BoardView } from "@/lib/board/view";
 import { AGENDA_WINDOW_DAYS } from "@/lib/board/view";
@@ -44,12 +36,6 @@ import type { PasskeySummary } from "@/lib/passkeys/data";
  * would quietly turn it into a string while the type still claimed otherwise.
  */
 
-function toPlaceDto(place: Place): PlaceDto {
-  // Deliberately not the whole row: `address` is on the board's Place and nothing on the phone
-  // shows it. Sending it anyway would make it a promise.
-  return { id: place.id, name: place.name, isHome: place.isHome };
-}
-
 export function toMeDto(actor: ProfileActor): MeDto {
   return {
     profileId: actor.profileId,
@@ -64,8 +50,9 @@ function toPresenceDto(row: BoardView["presence"][number]): PresenceDto {
     profileId: row.member.profileId,
     name: row.member.name,
     avatarPath: avatarPath(row.member.profileId, row.member.name),
-    place: row.place ? toPlaceDto(row.place) : null,
+    state: row.state,
     until: row.until,
+    note: row.note,
   };
 }
 
@@ -73,10 +60,20 @@ function toGatheringDto(
   gathering: BoardView["gathering"],
 ): GatheringDto | null {
   if (!gathering) return null;
+  return { date: gathering.date, inDays: gathering.inDays };
+}
+
+function toGridRowDto(
+  row: BoardView["grid"][number],
+  actor: Actor | null,
+): GridRowDto {
   return {
-    date: gathering.date,
-    place: toPlaceDto(gathering.place),
-    inDays: gathering.inDays,
+    profileId: row.member.profileId,
+    name: row.member.name,
+    avatarPath: avatarPath(row.member.profileId, row.member.name),
+    days: row.days,
+    horizon: row.horizon,
+    editable: actor ? canEditProfile(actor, row.member.profileId) : false,
   };
 }
 
@@ -90,7 +87,6 @@ function toGatheringDto(
 function toAgendaDto(
   entries: AgendaEntry[],
   membersByProfileId: BoardView["membersByProfileId"],
-  placesById: BoardView["placesById"],
 ): AgendaEntryDto[] {
   return entries.map((entry) => {
     if (entry.kind === "event") {
@@ -108,22 +104,12 @@ function toAgendaDto(
     // not knowing.
     const personName = membersByProfileId[entry.profileId]?.name ?? "Someone";
 
-    if (entry.kind === "birthday") {
-      return {
-        kind: "birthday",
-        date: entry.date,
-        profileId: entry.profileId,
-        personName,
-        turning: entry.turning,
-      };
-    }
-
     return {
-      kind: entry.kind,
+      kind: "birthday",
       date: entry.date,
       profileId: entry.profileId,
       personName,
-      placeName: placesById[entry.placeId]?.name ?? "somewhere",
+      turning: entry.turning,
     };
   });
 }
@@ -152,64 +138,34 @@ export function toBoardDto(
   view: BoardView,
   awaiting: BoardPoll[],
   viewerUserId: string,
+  viewerProfileId: string,
+  actor: Actor | null,
 ): BoardDto {
   return {
     today: view.today,
+    viewerProfileId,
     awaiting: toAwaitingDto(awaiting, viewerUserId),
     gathering: toGatheringDto(view.gathering),
+    // Ids alongside the names, unlike everywhere else that resolves to names only: the sentence
+    // the client renders is "Waiting on you and Tanner", and it cannot say "you" from a name.
+    unsaid: view.unsaidToday.map((member) => ({
+      profileId: member.profileId,
+      name: member.name,
+    })),
     presence: view.presence.map(toPresenceDto),
-    agenda: toAgendaDto(view.agenda, view.membersByProfileId, view.placesById),
+    gridDays: view.gridDays,
+    grid: view.grid.map((row) => toGridRowDto(row, actor)),
+    agenda: toAgendaDto(view.agenda, view.membersByProfileId),
     agendaWindowDays: AGENDA_WINDOW_DAYS,
   };
 }
 
-// --- Stays -------------------------------------------------------------------
-
-/**
- * The stay editor's data.
- *
- * `lists` carries only the people the viewer may edit — `getEditorData` has already narrowed that
- * from the actor's role. The client does not filter: a row it cannot change is a row it should
- * never have been shown, and deciding that here means one answer rather than one per client.
- */
-export function toWhereDto(
-  today: CalendarDateString,
-  data: EditorData,
-): WhereDto {
-  const placesById = new Map(data.places.map((place) => [place.id, place]));
-
-  return {
-    today,
-    places: data.places.map(toPlaceDto),
-    lists: data.stayLists.map((list) => ({
-      profileId: list.member.profileId,
-      name: list.member.name,
-      avatarPath: avatarPath(list.member.profileId, list.member.name),
-      stays: list.stays.flatMap((stay) => {
-        const place = placesById.get(stay.placeId);
-        // A stay whose place has been deleted cannot be rendered or safely edited, and sending it
-        // with a null place would push that decision onto every client.
-        return place ? [toStayDto(stay, place)] : [];
-      }),
-    })),
-  };
-}
-
-function toStayDto(stay: BoardStay, place: Place): StayDto {
-  return {
-    id: stay.id,
-    profileId: stay.profileId,
-    place: toPlaceDto(place),
-    startsOn: stay.startsOn,
-    endsOn: stay.endsOn,
-    note: stay.note,
-  };
-}
+// --- Presence ----------------------------------------------------------------
 
 // --- Polls -------------------------------------------------------------------
 
 /**
- * A poll, tallied and resolved to names.
+ * An ask, tallied and resolved to names.
  *
  * `viewerProfileId` decides two things the client should not have to work out: which answer is
  * "mine" on each option, and whether anything is still waiting on this person.
@@ -247,13 +203,13 @@ export function toPollDto(
 
     return {
       id: tally.optionId,
-      startsOn: window?.startsOn ?? "",
-      endsOn: window?.endsOn ?? "",
+      label: window?.label ?? null,
+      onDate: window?.onDate ?? null,
       yesNames: names(tally.yesBy),
       maybeNames: names(tally.maybeBy),
       noNames: names(tally.noBy),
       silentNames: names(tally.silentBy),
-      everyoneCanMake: tally.everyoneCanMake,
+      unanimous: tally.unanimous,
       myReply: mine?.kind ?? null,
       isSettled: poll.settledOptionId === tally.optionId,
       replyByProfileId,
@@ -264,7 +220,7 @@ export function toPollDto(
     id: poll.id,
     title: poll.title,
     status: poll.status,
-    placeName: poll.placeName,
+    closesOn: poll.closesOn,
     // Null when the viewer asked it — being told "Brandon is waiting on you" when you are Brandon
     // reads as a bug, so the decision is made here rather than left to each client to remember.
     askedByName: poll.createdById === viewerUserId ? null : poll.createdByName,

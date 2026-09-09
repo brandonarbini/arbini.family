@@ -3,22 +3,16 @@ import "server-only";
 import {
   type BoardPoll,
   type FamilyMember,
-  type Place,
   getFamilyMembers,
-  getPlaces,
   getPoll,
-  getStaysForWindow,
+  getPresenceForWindow,
 } from "@/lib/board/data";
-import {
-  type CalendarDate,
-  differenceInCalendarDays,
-  eachCalendarDay,
-} from "@/lib/dates";
+import { type CalendarDate, differenceInCalendarDays } from "@/lib/dates";
 import { type OptionTally, rankOptions, tallyPoll } from "@/lib/polls/tally";
-import { locationsOn } from "@/lib/presence";
+import { statesOn } from "@/lib/presence/derive";
 
 /**
- * One poll, assembled for the ballot.
+ * One ask, assembled for the ballot.
  *
  * Route-private: this shape exists to be rendered by `/polls/[id]` and nowhere else. No auth here
  * — `page.tsx` does that before calling in.
@@ -26,29 +20,34 @@ import { locationsOn } from "@/lib/presence";
 
 export interface OptionView {
   optionId: string;
-  startsOn: CalendarDate;
-  endsOn: CalendarDate;
+  /** What the option says. Null when the date is the whole of it. */
+  label: string | null;
+  /** The day this option is about, when it is about one. */
+  onDate: CalendarDate | null;
   tally: OptionTally;
   /** True when this is the option the family landed on. */
   isSettled: boolean;
   /**
-   * People who are somewhere other than *the gathering* for any part of the option, and where.
+   * People who have already said they will be away on this option's day, and why.
    *
-   * Measured against the poll's own place, not against home. A "Beach day?" poll that reported
-   * everyone as present because they were all at home would be exactly backwards.
+   * Empty for an option that is not about a day, which is most of them now — "tacos" has nobody
+   * away from it.
    *
-   * Built from recorded stays alone, so the line is empty until somebody has said where they will
-   * be. Silence here means nothing is known, not that everyone is free — the tally is what says
-   * who can come, and this only flags the days a recorded stay already contradicts. Derived,
+   * Read, never written. Settling used to record everyone's answer as a location, which meant
+   * saying yes to a Thursday quietly asserted where you would be for two days; that is gone. What
+   * survives is the useful half — seeing "Addison's away — Vanguard" at the moment somebody is
+   * choosing a Thursday, so nobody proposes one without knowing.
+   *
+   * Built from what people have said alone, so the line is empty until somebody has said
+   * something. Silence here means nothing is known, not that everyone is free — the tally is what
+   * says who is in, and this only flags a day an existing statement already contradicts. Derived,
    * never stored.
    */
-  awayNotes: { member: FamilyMember; place: Place }[];
+  awayNotes: { member: FamilyMember; note: string | null }[];
 }
 
 export interface PollView {
   poll: BoardPoll;
-  /** Where the gathering resolves to — the poll's place, or home when it named none. */
-  gatheringPlace: Place | null;
   members: FamilyMember[];
   options: OptionView[];
   /** Best first, so whoever settles it does not have to read the counts. */
@@ -64,69 +63,63 @@ export async function getPollView(
   const poll = await getPoll(pollId);
   if (!poll) return null;
 
-  const [members, places] = await Promise.all([
-    getFamilyMembers(),
-    getPlaces(),
-  ]);
+  const members = await getFamilyMembers();
   const profileIds = members.map((member) => member.profileId);
   const replies = poll.options.flatMap((option) => option.replies);
   const tallies = tallyPoll(poll.options, replies, profileIds);
   const talliesById = new Map(tallies.map((tally) => [tally.optionId, tally]));
 
-  // Bounded by the options themselves rather than by a fixed horizon: a poll about Thanksgiving
-  // is months out, and a 30-day window would load none of the stays that cover it.
-  const earliest = poll.options.reduce<CalendarDate | null>(
-    (min, option) =>
-      min === null || option.startsOn < min ? option.startsOn : min,
-    null,
-  );
-  const latest = poll.options.reduce<CalendarDate | null>(
-    (max, option) =>
-      max === null || option.endsOn > max ? option.endsOn : max,
-    null,
-  );
-  const stays =
-    earliest && latest
-      ? await getStaysForWindow(
-          earliest,
-          differenceInCalendarDays(earliest, latest),
+  // Bounded by the dated options rather than by a fixed horizon: an ask about Thanksgiving is
+  // months out, and a 30-day window would load none of the runs that cover it. An ask with no
+  // dated options loads nothing at all, which is the common case now.
+  const dates = poll.options
+    .map((option) => option.onDate)
+    .filter((date): date is CalendarDate => date !== null)
+    .sort();
+  const rows =
+    dates.length > 0
+      ? await getPresenceForWindow(
+          dates[0],
+          differenceInCalendarDays(dates[0], dates[dates.length - 1]),
         )
       : [];
 
-  const placesById = new Map(places.map((place) => [place.id, place]));
-  // The same fallback `settlePoll` applies, so what the ballot says about who is away and what
-  // settling actually writes cannot disagree.
-  const gatheringPlace =
-    (poll.placeId ? placesById.get(poll.placeId) : undefined) ??
-    places.find((place) => place.isHome) ??
-    null;
   const membersByProfileId = new Map(
     members.map((member) => [member.profileId, member]),
   );
+  const stateByDay = new Map(
+    dates.map((date) => [date, statesOn(rows, profileIds, date)]),
+  );
 
   const options: OptionView[] = poll.options.map((option) => {
-    // One entry per person, not per day: "Addison's at Vanguard" reads as context, whereas the
-    // same sentence repeated for each day of a long weekend reads as an error message.
-    const away = new Map<string, Place>();
-    for (const day of eachCalendarDay(option.startsOn, option.endsOn)) {
-      for (const [profileId, placeId] of locationsOn(stays, profileIds, day)) {
-        if (placeId === null || away.has(profileId)) continue;
-        if (gatheringPlace && placeId === gatheringPlace.id) continue;
-        const place = placesById.get(placeId);
-        if (place) away.set(profileId, place);
-      }
+    const states = option.onDate ? stateByDay.get(option.onDate) : undefined;
+    const away = new Map<string, string | null>();
+
+    for (const [profileId, state] of states ?? []) {
+      // Unsaid is not away. A person who has said nothing about a Thursday has not objected to it,
+      // and flagging them would turn silence into an answer — which is the one thing nothing in
+      // this app does.
+      if (state !== "AWAY") continue;
+      const run =
+        rows.find(
+          (row) =>
+            row.profileId === profileId &&
+            row.startsOn <= option.onDate! &&
+            (row.endsOn === null || row.endsOn >= option.onDate!),
+        ) ?? null;
+      away.set(profileId, run?.note ?? null);
     }
 
     return {
       optionId: option.optionId,
-      startsOn: option.startsOn,
-      endsOn: option.endsOn,
+      label: option.label,
+      onDate: option.onDate,
       tally: talliesById.get(option.optionId)!,
       isSettled: poll.settledOptionId === option.optionId,
       awayNotes: [...away]
-        .map(([profileId, place]) => ({
+        .map(([profileId, note]) => ({
           member: membersByProfileId.get(profileId)!,
-          place,
+          note,
         }))
         // Board order, so the notes read down the page the same way the avatars do.
         .sort((a, b) => a.member.sortOrder - b.member.sortOrder),
@@ -135,7 +128,6 @@ export async function getPollView(
 
   return {
     poll,
-    gatheringPlace,
     members,
     options,
     ranked: rankOptions(tallies),

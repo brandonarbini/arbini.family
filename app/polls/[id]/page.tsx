@@ -17,7 +17,7 @@ import { canManagePoll } from "@/lib/board/permissions";
 import { formatCalendarDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "A poll — Arbini Family" };
+export const metadata = { title: "An ask — Arbini Family" };
 
 export default async function PollPage({
   params,
@@ -31,15 +31,15 @@ export default async function PollPage({
   const view = await getPollView(id, actor.profileId);
   if (!view) notFound();
 
-  const { poll, gatheringPlace, members, options, ranked } = view;
+  const { poll, members, options, ranked } = view;
   const mayManage = canManagePoll(actor, poll.createdById);
   // A leader only when it actually leads: with nothing answered every option ties at zero, and
   // labelling the first one "best so far" would be the board inventing a preference nobody has
   // expressed yet.
+  // `ranked.length > 1` because "best so far" on the only choice is the board inventing a
+  // preference nobody expressed — which is exactly what the rest of this guard exists to prevent.
   const leader =
-    ranked[0] &&
-    ranked[0].yes > 0 &&
-    (!ranked[1] || ranked[1].yes < ranked[0].yes)
+    ranked.length > 1 && ranked[0].yes > 0 && ranked[1].yes < ranked[0].yes
       ? ranked[0]
       : null;
 
@@ -53,41 +53,45 @@ export default async function PollPage({
               Naming who asked is not decoration. Anyone may start a poll, and a poll that never
               says who started it quietly reads as something the parents do.
             */}
-            {poll.createdByName ? `${poll.createdByName} asked` : "Asked"}
             {/*
-              Only when it is somewhere other than home. Printing "at Home" on every weekly dinner
-              poll is a word that never varies, which is a word nobody reads.
+              "You asked" rather than "Brandon Arbini asked" to Brandon. The rule is stated twice
+              in this app and enforced in the mobile serializer, and the web ballot never got the
+              memo — it was also the only place that printed a full name, where every other surface
+              uses the first.
             */}
-            {gatheringPlace && !gatheringPlace.isHome
-              ? ` · at ${gatheringPlace.name}`
-              : ""}
+            {poll.createdById === actor.id
+              ? "You asked"
+              : poll.createdByName
+                ? `${firstName(poll.createdByName)} asked`
+                : null}
             {poll.status === "SETTLED" ? " · settled" : ""}
           </p>
           <ShareLink />
         </div>
       </div>
 
-      <Section
-        title={poll.status === "SETTLED" ? "The date" : "Which days work?"}
-      >
-        <div className="space-y-6">
-          {options.map((option) => (
-            <OptionRow
-              key={option.optionId}
-              option={option}
-              members={members}
-              viewerProfileId={actor.profileId}
-              pollId={poll.id}
-              settled={poll.status === "SETTLED"}
-              mayManage={mayManage}
-              isBest={leader?.optionId === option.optionId}
-            />
-          ))}
-        </div>
-      </Section>
+      {poll.status === "SETTLED" ? (
+        <Answer options={options} members={members} />
+      ) : (
+        <Section title="The choices">
+          <div className="space-y-6">
+            {options.map((option) => (
+              <OptionRow
+                key={option.optionId}
+                option={option}
+                members={members}
+                viewerProfileId={actor.profileId}
+                pollId={poll.id}
+                mayManage={mayManage}
+                isBest={leader?.optionId === option.optionId}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
 
       {mayManage ? (
-        <Section title="This poll">
+        <Section title="This ask">
           <div className="flex flex-wrap items-center gap-3">
             {poll.status === "SETTLED" ? (
               <ReopenButton pollId={poll.id} />
@@ -97,7 +101,7 @@ export default async function PollPage({
               href={`/polls/new?from=${poll.id}`}
               className="font-copy text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
             >
-              Ask again next week
+              Ask again
             </Link>
           </div>
         </Section>
@@ -105,19 +109,128 @@ export default async function PollPage({
 
       <p className="font-copy text-sm text-muted-foreground">
         <Link href="/polls" className="underline underline-offset-4">
-          All polls
+          Everything the family&rsquo;s been asked
         </Link>
       </p>
     </div>
   );
 }
 
+/**
+ * A settled ask, which is a different screen rather than the ballot with its buttons removed.
+ *
+ * It was the latter, and that is what made it unreadable: a heading saying "The answer" over two
+ * options given identical weight, each with a full five-person roster of dashes, and the winner
+ * marked only by a hairline and four words of grey type on the far right. The rejected date got as
+ * much of the page as the chosen one, and ten rows of "—" reported a fact about the *question*
+ * long after it had stopped being asked.
+ *
+ * So: the answer leads, at the size the board's own lede uses. Anything that would have made
+ * somebody hesitate sits directly under it. Who said what stays, because a family looks that up
+ * later, but as a row of faces rather than a form. The options nobody chose collapse to one line —
+ * they are why the answer is the answer, and that is all they are now.
+ */
+function Answer({
+  options,
+  members,
+}: {
+  options: OptionView[];
+  members: FamilyMember[];
+}) {
+  const chosen = options.find((option) => option.isSettled);
+  const rest = options.filter((option) => !option.isSettled);
+
+  // Settling on an option that was since deleted leaves a poll marked settled with nothing to show
+  // for it. Rare, and `Poll.settledOption` is SetNull precisely so it does not cascade the poll
+  // away — so the page has to render something honest rather than crash.
+  if (!chosen) {
+    return (
+      <Section title="The answer">
+        <p className="font-copy text-base text-muted-foreground">
+          The option the family chose has since been deleted.
+        </p>
+      </Section>
+    );
+  }
+
+  const kinds = new Map<string, ReplyKind>();
+  for (const id of chosen.tally.yesBy) kinds.set(id, "YES");
+  for (const id of chosen.tally.maybeBy) kinds.set(id, "MAYBE");
+  for (const id of chosen.tally.noBy) kinds.set(id, "NO");
+
+  return (
+    <Section title="The answer">
+      <p className="font-headline text-4xl leading-tight sm:text-5xl">
+        {describeOption(chosen)}
+      </p>
+
+      {/*
+        The most useful sentence on a settled ask, and the one that was whispered: somebody has
+        said they will not be there. It is spent in the accent because this is exactly what the
+        accent is for — the few things worth looking for.
+      */}
+      {chosen.awayNotes.length > 0 ? (
+        <p className="font-copy mt-2 text-base text-primary">
+          {describeAway(chosen)}
+        </p>
+      ) : null}
+
+      <p className="font-copy mt-2 text-base text-muted-foreground">
+        {describeAnswer(chosen)}
+      </p>
+
+      {/*
+        The same three marks the board's "Today" row uses, for the same reason: a face carries a
+        state faster than a word does, and an unanswered person has to read as a gap rather than as
+        a different kind of answer.
+      */}
+      <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-4">
+        {members.map((member) => {
+          const kind = kinds.get(member.profileId) ?? null;
+          return (
+            <li
+              key={member.profileId}
+              className="flex w-14 flex-col items-center gap-1.5 text-center"
+            >
+              {kind === null ? (
+                <span
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full border border-dashed border-border"
+                  aria-hidden
+                />
+              ) : (
+                <PersonBadge
+                  name={member.name}
+                  size={44}
+                  className={kind === "NO" ? "opacity-35" : undefined}
+                />
+              )}
+              <span className="font-copy text-sm leading-tight">
+                {firstName(member.name)}
+              </span>
+              <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
+                {kind === null ? "nothing said" : LABELS[kind]}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {rest.length > 0 ? (
+        <p className="font-copy mt-6 text-sm text-muted-foreground">
+          Also asked about{" "}
+          {rest.map((option) => describeOption(option)).join(", ")}.
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
+/** One option on an ask still being answered. A settled one is rendered by `Answer` instead. */
 function OptionRow({
   option,
   members,
   viewerProfileId,
   pollId,
-  settled,
   mayManage,
   isBest,
 }: {
@@ -125,7 +238,6 @@ function OptionRow({
   members: FamilyMember[];
   viewerProfileId: string;
   pollId: string;
-  settled: boolean;
   mayManage: boolean;
   isBest: boolean;
 }) {
@@ -146,25 +258,13 @@ function OptionRow({
   for (const id of option.tally.noBy) kinds.set(id, "NO");
 
   return (
-    <div
-      className={cn(
-        "border-t-2 pt-3",
-        option.isSettled ? "border-success" : "border-foreground/15",
-      )}
-    >
+    <div className="border-t-2 border-foreground/15 pt-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="font-headline text-2xl">{describeRange(option)}</h3>
+        <h3 className="font-headline text-2xl">{describeOption(option)}</h3>
         <p className="font-copy text-sm text-muted-foreground">
-          {option.isSettled
-            ? "That's the one"
-            : // Once a date is chosen the others are history, so they stop asking for anything.
-              // Leaving "waiting on you" under a date the family has already moved past is a
-              // prompt to do something that no longer needs doing.
-              settled
-              ? `${option.tally.yes} yes`
-              : option.tally.everyoneCanMake
-                ? "Everyone can make it"
-                : summarize(option, nameOf)}
+          {option.tally.unanimous
+            ? "Everyone said yes"
+            : summarize(option, nameOf)}
         </p>
       </div>
 
@@ -175,12 +275,7 @@ function OptionRow({
       */}
       {option.awayNotes.length > 0 ? (
         <p className="font-copy mt-1 text-sm text-muted-foreground/80">
-          {option.awayNotes
-            .map(
-              (note) =>
-                `${firstName(note.member.name)}'s at ${note.place.name}`,
-            )
-            .join(" · ")}
+          {describeAway(option)}
         </p>
       ) : null}
 
@@ -208,7 +303,7 @@ function OptionRow({
               >
                 {firstName(member.name)}
               </span>
-              {isViewer && !settled ? (
+              {isViewer ? (
                 <div className="ml-auto w-full max-w-[15rem]">
                   <AnswerButtons
                     optionId={option.optionId}
@@ -226,14 +321,19 @@ function OptionRow({
         })}
       </RuledList>
 
-      {mayManage && !settled ? (
-        <div className="mt-3 flex items-center gap-3">
+      {mayManage ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <SettleButton
             pollId={pollId}
             optionId={option.optionId}
-            label={`It's ${describeRange(option)}`}
+            label={`It's ${describeOption(option)}`}
+            // Only when there is something to warn about. The two-press confirm is in
+            // `SettleButton`; what counts as a problem is decided here, where the data is.
+            warning={
+              option.awayNotes.length > 0 ? describeAway(option) : undefined
+            }
           />
-          {isBest && !option.tally.everyoneCanMake ? (
+          {isBest && !option.tally.unanimous ? (
             <span className="font-copy text-xs text-muted-foreground">
               Best so far
             </span>
@@ -247,23 +347,62 @@ function OptionRow({
 const LABELS: Record<ReplyKind, string> = {
   YES: "Yes",
   MAYBE: "Maybe",
-  NO: "Can't",
+  NO: "No",
 };
 
-/** A single day reads as a day; a range reads as a range. Same row, two shapes. */
-function describeRange(option: { startsOn: string; endsOn: string }): string {
-  if (option.startsOn === option.endsOn) {
-    return formatCalendarDate(option.startsOn, "EEE d MMM");
-  }
-  return `${formatCalendarDate(option.startsOn, "EEE d")}–${formatCalendarDate(option.endsOn, "EEE d MMM")}`;
+/**
+ * What the option says.
+ *
+ * The date is formatted here rather than written into the column at creation. Freezing "Sat 19
+ * Sep" into the database would be a display format stored as data, which is the thing the whole of
+ * `lib/dates.ts` exists to prevent — and it would mean an ask made last year rendering in last
+ * year's format beside one made today.
+ */
+function describeOption(option: {
+  label: string | null;
+  onDate: string | null;
+}): string {
+  if (option.label !== null) return option.label;
+  return formatCalendarDate(option.onDate!, "EEE d MMM");
+}
+
+/**
+ * Who has said they will not be there, and why.
+ *
+ * The "why" is whatever that person typed on their own strip — "Vanguard", "work trip" — and it is
+ * free text, not a place the app knows anything about. Nothing derives it and nothing compares it;
+ * it is carried from the `Presence` row that covers the day, so it says what they meant it to say.
+ */
+function describeAway(option: OptionView): string {
+  return option.awayNotes
+    .map((entry) =>
+      entry.note
+        ? `${firstName(entry.member.name)}'s away — ${entry.note}`
+        : `${firstName(entry.member.name)}'s away`,
+    )
+    .join(" · ");
+}
+
+/** What the answer got, in a sentence, rather than as a scoreboard. */
+function describeAnswer(option: OptionView): string {
+  const { yes, maybe, noBy, silentBy } = option.tally;
+  const parts: string[] = [];
+  if (yes > 0) parts.push(`${yes} yes`);
+  if (maybe > 0) parts.push(`${maybe} maybe`);
+  if (noBy.length > 0) parts.push(`${noBy.length} no`);
+  if (parts.length === 0) return "Nobody answered this one.";
+  const said = parts.join(", ");
+  return silentBy.length > 0
+    ? `${said} — and ${silentBy.length} didn't answer.`
+    : said;
 }
 
 /**
  * Who is still to answer, or who cannot make it — named, never counted.
  *
- * "Waiting on Macy" is something somebody can act on; "3 of 5" is a scoreboard. Naming who cannot
- * make a date next to the away line above also keeps a blocker a *circumstance* — Addison is at
- * Vanguard — rather than a person to be talked out of it.
+ * "Waiting on Macy" is something somebody can act on; "3 of 5" is a scoreboard. Naming who said no
+ * next to the away line above also keeps a blocker a *circumstance* — Addison is at Vanguard —
+ * rather than a person to be talked out of it.
  */
 function summarize(
   option: OptionView,
@@ -271,7 +410,7 @@ function summarize(
 ): string {
   const { silentBy, noBy } = option.tally;
   if (silentBy.length > 0) return `Waiting on ${list(silentBy.map(nameOf))}`;
-  if (noBy.length > 0) return `${list(noBy.map(nameOf))} can't make it`;
+  if (noBy.length > 0) return `${list(noBy.map(nameOf))} said no`;
   return `${option.tally.yes} yes, ${option.tally.maybe} maybe`;
 }
 

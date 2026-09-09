@@ -108,9 +108,11 @@ function AuthGate() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
       <Stack.Screen name="auth" options={{ animation: 'none' }} />
-      {/* The stay editor arrives as a sheet: it is a detour from the list, not a place. */}
-      <Stack.Screen name="stay/new" options={{ presentation: 'formSheet' }} />
-      <Stack.Screen name="stay/[id]" options={{ presentation: 'formSheet' }} />
+      {/*
+        No sheets left. The stay editor needed two — one to create, one to edit — because a stay
+        was a form. Saying where you'll be is now a tap on the strip that is already on screen,
+        so there is nothing to detour to.
+      */}
     </Stack>
   );
 }

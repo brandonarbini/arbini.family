@@ -4,8 +4,12 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 /**
- * Four tabs, in the order the web app's nav puts them: the board, where everyone is, the open
- * questions, and the one screen where you change something about yourself.
+ * Three tabs, in the order the web app's nav puts them: the board, the open questions, and the
+ * one screen where you change something about yourself.
+ *
+ * There were four. "Around" drew the same fourteen days the board already drew, in the same three
+ * marks, as buttons — one tab was a photograph of the other, and the app's most frequent action
+ * began by leaving the screen that asked for it. The board now carries both.
  *
  * The colours are monochrome on purpose. iOS tints tab bars with the system blue unless told
  * otherwise, and `labelStyle` alone does not override the icon — that is why the first build had
@@ -34,13 +38,8 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf="newspaper" drawable="ic_menu_agenda" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="where">
-        <NativeTabs.Trigger.Label>Where I am</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="mappin.and.ellipse" drawable="ic_menu_mylocation" />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="polls">
-        <NativeTabs.Trigger.Label>Polls</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Asks</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" drawable="ic_menu_sort_by_size" />
       </NativeTabs.Trigger>
 

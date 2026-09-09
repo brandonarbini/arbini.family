@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  type PollOptionWindow,
+  type PollOptionRef,
   type PollReplyRecord,
   rankOptions,
   sortOptions,
@@ -13,20 +13,17 @@ const THU = "option-thu";
 const SAT = "option-sat";
 const SUN = "option-sun";
 
-function option(
-  optionId: string,
-  startsOn: string,
-  sortOrder: number,
-  endsOn = startsOn,
-): PollOptionWindow {
-  return { optionId, startsOn, endsOn, sortOrder };
+/**
+ * An option, as far as counting is concerned: an id and a position.
+ *
+ * Nothing here knows what an option *says*. It used to take dates and sort by them, which is why
+ * options becoming free text touched every other file and not this one.
+ */
+function option(optionId: string, sortOrder: number): PollOptionRef {
+  return { optionId, sortOrder };
 }
 
-const OPTIONS = [
-  option(THU, "2026-12-03", 0),
-  option(SAT, "2026-12-05", 1),
-  option(SUN, "2026-12-06", 2),
-];
+const OPTIONS = [option(THU, 0), option(SAT, 1), option(SUN, 2)];
 
 function reply(
   optionId: string,
@@ -83,35 +80,33 @@ describe("tallyPoll", () => {
     expect(find(tallies, THU).silentBy).toEqual(FAMILY);
   });
 
-  it("reports everyoneCanMake only when every person said yes", () => {
+  it("reports unanimous only when every person said yes", () => {
     expect(
-      find(tallyPoll(OPTIONS, allSay(SAT, "YES"), FAMILY), SAT).everyoneCanMake,
+      find(tallyPoll(OPTIONS, allSay(SAT, "YES"), FAMILY), SAT).unanimous,
     ).toBe(true);
   });
 
-  it("does not report everyoneCanMake when nobody objected but somebody stayed silent", () => {
+  it("does not report unanimous when nobody objected but somebody stayed silent", () => {
     // Silence is not consent. A poll that settled a date because three people ignored it would
     // be wrong in exactly the case anybody would act on.
     const replies = allSay(SAT, "YES").filter((r) => r.profileId !== "macy");
-    expect(find(tallyPoll(OPTIONS, replies, FAMILY), SAT).everyoneCanMake).toBe(
+    expect(find(tallyPoll(OPTIONS, replies, FAMILY), SAT).unanimous).toBe(
       false,
     );
   });
 
-  it("does not report everyoneCanMake on a maybe", () => {
+  it("does not report unanimous on a maybe", () => {
     const replies = [
       ...allSay(SAT, "YES").filter((r) => r.profileId !== "macy"),
       reply(SAT, "macy", "MAYBE"),
     ];
-    expect(find(tallyPoll(OPTIONS, replies, FAMILY), SAT).everyoneCanMake).toBe(
+    expect(find(tallyPoll(OPTIONS, replies, FAMILY), SAT).unanimous).toBe(
       false,
     );
   });
 
   it("reports no gathering for an empty family rather than a vacuous yes", () => {
-    expect(tallyPoll(OPTIONS, [], []).every((t) => !t.everyoneCanMake)).toBe(
-      true,
-    );
+    expect(tallyPoll(OPTIONS, [], []).every((t) => !t.unanimous)).toBe(true);
   });
 
   it("ignores replies from someone outside the family", () => {
@@ -208,16 +203,12 @@ describe("rankOptions", () => {
 });
 
 describe("sortOptions", () => {
-  it("orders by sortOrder, then date, then id, so the sort is total", () => {
-    const tied = [
-      option("b", "2026-12-05", 0),
-      option("a", "2026-12-05", 0),
-      option("c", "2026-12-04", 0),
-    ];
-    expect(sortOptions(tied).map((o) => o.optionId)).toEqual(["c", "a", "b"]);
+  it("orders by sortOrder, then id, so the sort is total", () => {
+    const tied = [option("b", 1), option("a", 0), option("c", 0)];
+    expect(sortOptions(tied).map((o) => o.optionId)).toEqual(["a", "c", "b"]);
     expect(sortOptions([...tied].reverse()).map((o) => o.optionId)).toEqual([
-      "c",
       "a",
+      "c",
       "b",
     ]);
   });
