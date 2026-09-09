@@ -31,31 +31,20 @@ export function SettleButton({
   warning?: string;
 }) {
   const [state, formAction, pending] = useActionState(decide, null);
-  const [armed, setArmed] = useState(false);
 
   /*
-   * Two presses rather than a modal, and only when there is something to say.
+   * One press, and the label keeps naming what it settles on.
    *
-   * The board already knows the one fact that would make somebody stop — that a person has said
-   * they are away that day — and it used to render that fact as grey context beside every option
-   * equally, which is a thing you read past. Putting it *in the button* is the difference between
-   * publishing it and saying it.
+   * This used to arm: the first press turned it into "Settle anyway" and the second committed. Two
+   * things were wrong with that. Settling is *reversible* — `ReopenButton` is two inches away and
+   * `decide("")` puts it back — so it was the ceremony-heavy control on a page whose one
+   * irreversible action had none at all. And at the moment of commit the button stopped saying
+   * which option it was committing to, which on an ask with two dated choices is genuinely
+   * ambiguous.
    *
-   * It warns rather than refuses. Settling a date somebody cannot make is a legitimate decision —
-   * the family may go camping without Addison — and an app that blocked it would be an app that
-   * knows better than the family, which this one is careful never to be.
+   * The warning stays, permanently, beside the button. It is the fact worth knowing; it was never
+   * the press that needed slowing down.
    */
-  if (warning && !armed) {
-    return (
-      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Button type="button" size="sm" onClick={() => setArmed(true)}>
-          {label}
-        </Button>
-        <span className="font-copy text-xs text-primary">{warning}</span>
-      </span>
-    );
-  }
-
   return (
     <form
       action={formAction}
@@ -65,19 +54,10 @@ export function SettleButton({
       <input type="hidden" name="optionId" value={optionId} />
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        {armed ? "Settle anyway" : label}
+        {label}
       </Button>
-      {armed ? (
-        <>
-          <span className="font-copy text-xs text-primary">{warning}</span>
-          <button
-            type="button"
-            onClick={() => setArmed(false)}
-            className="text-xs text-muted-foreground underline underline-offset-4"
-          >
-            Never mind
-          </button>
-        </>
+      {warning ? (
+        <span className="font-copy text-xs text-primary">{warning}</span>
       ) : null}
       {state && !state.ok && state.formError ? (
         <span role="alert" className="text-xs text-destructive">
@@ -101,7 +81,7 @@ export function ReopenButton({ pollId }: { pollId: string }) {
         Reopen
       </Button>
       {state && !state.ok && state.formError ? (
-        <span role="alert" className="ml-2 text-xs text-destructive">
+        <span role="alert" className="text-xs text-destructive">
           {state.formError}
         </span>
       ) : null}
@@ -109,28 +89,54 @@ export function ReopenButton({ pollId }: { pollId: string }) {
   );
 }
 
+/**
+ * The one thing on this page that cannot be undone.
+ *
+ * It was a single unconfirmed press that destroyed the ask, every option, and everyone's answers,
+ * and then redirected to a list that could not show you what had gone. The evidence of the mistake
+ * was the absence of the thing, which is the least detectable failure there is — and it sat in a
+ * flat row beside two reversible controls, at the bottom of a long scroll, where a thumb arrives.
+ *
+ * So it takes the two presses that settling used to take, and the armed label says what goes with
+ * it. Risk and ceremony now point the same way.
+ */
 export function DeletePollButton({ pollId }: { pollId: string }) {
   const [state, formAction, pending] = useActionState(removePoll, null);
+  const [armed, setArmed] = useState(false);
 
-  return (
-    <form action={formAction} className="inline">
-      <input type="hidden" name="pollId" value={pollId} />
-      {/*
-        The only destructive control on the page, and the only one that looks it. It sat in the
-        same quiet ghost as everything else, which made "Delete" read as one more thing to try.
-      */}
+  if (!armed) {
+    return (
       <Button
-        type="submit"
+        type="button"
         variant="ghost"
         size="sm"
-        disabled={pending}
+        onClick={() => setArmed(true)}
         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
       >
-        {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
-        Delete
+        Delete this ask
       </Button>
+    );
+  }
+
+  return (
+    <form
+      action={formAction}
+      className="inline-flex flex-wrap items-center gap-x-3 gap-y-1"
+    >
+      <input type="hidden" name="pollId" value={pollId} />
+      <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+        {pending ? <Loader2 className="animate-spin" aria-hidden /> : null}
+        Delete it and everyone&rsquo;s answers
+      </Button>
+      <button
+        type="button"
+        onClick={() => setArmed(false)}
+        className="text-xs text-muted-foreground underline underline-offset-4"
+      >
+        Never mind
+      </button>
       {state && !state.ok && state.formError ? (
-        <span role="alert" className="ml-2 text-xs text-destructive">
+        <span role="alert" className="text-xs text-destructive">
           {state.formError}
         </span>
       ) : null}

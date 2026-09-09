@@ -114,13 +114,13 @@ export async function decide(
     optionId: formData.get("optionId") ?? "",
   });
   if (!parsed.success) {
-    return { ok: false, formError: "That poll no longer exists." };
+    return { ok: false, formError: "That ask no longer exists." };
   }
 
   // Read fresh rather than from the cached poll: this is an authorization input, and a cached
   // answer would keep naming whoever created it when the entry was written.
   const poll = await getPollCreatorUserId(parsed.data.pollId);
-  if (!poll) return { ok: false, formError: "That poll no longer exists." };
+  if (!poll) return { ok: false, formError: "That ask no longer exists." };
   if (!canManagePoll(actor, poll.createdById)) {
     return { ok: false, formError: "Only whoever asked can settle this." };
   }
@@ -130,7 +130,7 @@ export async function decide(
   } else {
     const settled = await settlePoll(parsed.data.pollId, parsed.data.optionId);
     if (!settled) {
-      return { ok: false, formError: "That date isn't one of the choices." };
+      return { ok: false, formError: "That isn't one of the choices." };
     }
   }
 
@@ -162,11 +162,11 @@ export async function removePoll(
     pollId: formData.get("pollId") ?? undefined,
   });
   if (!parsed.success) {
-    return { ok: false, formError: "That poll no longer exists." };
+    return { ok: false, formError: "That ask no longer exists." };
   }
 
   const poll = await getPollCreatorUserId(parsed.data.pollId);
-  if (!poll) return { ok: false, formError: "That poll no longer exists." };
+  if (!poll) return { ok: false, formError: "That ask no longer exists." };
   if (!canManagePoll(actor, poll.createdById)) {
     return { ok: false, formError: "Only whoever asked can delete this." };
   }

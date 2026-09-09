@@ -116,7 +116,7 @@ function Today({ board }: { board: Board }) {
         {board.presence.map((row) => (
           <li
             key={row.member.profileId}
-            className="flex w-14 flex-col items-center gap-1.5 text-center"
+            className="flex w-20 flex-col items-center gap-1.5 text-center"
           >
             {row.state === null ? (
               <span
@@ -140,7 +140,7 @@ function Today({ board }: { board: Board }) {
                 ? "here"
                 : row.state === "AWAY"
                   ? (row.note ?? "away")
-                  : "no word"}
+                  : "nothing said"}
             </span>
           </li>
         ))}

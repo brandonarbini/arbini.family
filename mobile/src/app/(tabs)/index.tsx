@@ -5,9 +5,11 @@ import type {
   GridRowDto,
   PresenceStateDto,
 } from '@server/api/v1/dto';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { LoadFailure } from '@/components/load-failure';
 import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, DateStamp, RuledList, Section } from '@/components/section';
@@ -32,7 +34,7 @@ export default function BoardScreen() {
   const { data, isPending, error, refetch, isRefetching } = useBoard();
 
   if (isPending) return <Page dateline="Loading">{null}</Page>;
-  if (error) return <BoardError error={error} onRetry={refetch} />;
+  if (error) return <LoadFailure title="The board" error={error} onRetry={refetch} />;
 
   return (
     <Page
@@ -44,35 +46,6 @@ export default function BoardScreen() {
       <Gathering board={data} />
       <Fortnight board={data} />
       <Agenda board={data} />
-    </Page>
-  );
-}
-
-/**
- * A failure the reader can act on, where there is an action, and an honest one where there is not.
- * An unauthenticated response is not shown as an error at all — the gate in `_layout.tsx` is
- * already navigating to sign-in, and a red box on the way out is just noise.
- */
-function BoardError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  const theme = useTheme();
-  const unauthenticated = error instanceof ApiError && error.code === 'unauthenticated';
-
-  return (
-    <Page dateline="Not loaded">
-      <Section title="The board">
-        <Copy muted>
-          {unauthenticated
-            ? 'Signing you in again…'
-            : error instanceof ApiError
-              ? error.message
-              : 'Could not reach the board. It may be the network.'}
-        </Copy>
-        {!unauthenticated ? (
-          <Text onPress={onRetry} style={[styles.retry, { color: theme.primary }]}>
-            Try again
-          </Text>
-        ) : null}
-      </Section>
     </Page>
   );
 }
@@ -91,7 +64,18 @@ function YourTurn({ board }: { board: BoardDto }) {
     <Section title="Your turn">
       <RuledList>
         {board.awaiting.map((poll) => (
-          <View key={poll.id}>
+          /*
+            Pressable, which it was not. This is the only thing in the app allowed to ask the
+            reader for something, and on the phone it named a question, said who was waiting, and
+            gave you nowhere to press — you had to notice the Asks tab and find the question again
+            in a list. A nag that cannot be acted on is worse than no nag.
+          */
+          <Pressable
+            key={poll.id}
+            onPress={() => router.navigate('/polls')}
+            accessibilityRole="button"
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
             <Text style={[styles.pollTitle, { color: theme.text }]}>{poll.title}</Text>
             <Copy muted style={styles.pollHint}>
               {/* Never "Brandon is waiting on you" to Brandon — the server sends null for that. */}
@@ -99,7 +83,7 @@ function YourTurn({ board }: { board: BoardDto }) {
                 ? `${poll.waitingOnName.split(' ')[0]} is waiting on you`
                 : 'you haven’t answered yet'}
             </Copy>
-          </View>
+          </Pressable>
         ))}
       </RuledList>
     </Section>
@@ -156,7 +140,7 @@ function Today({ board }: { board: BoardDto }) {
                 ? 'HERE'
                 : row.state === 'AWAY'
                   ? (row.note ?? 'AWAY').toUpperCase()
-                  : 'NO WORD'}
+                  : 'NOTHING SAID'}
             </Text>
           </View>
         ))}
@@ -800,7 +784,8 @@ const styles = StyleSheet.create({
   todayState: {
     fontFamily: Fonts.sans,
     fontSize: 8,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
+    textAlign: 'center',
   },
   agendaRow: {
     flexDirection: 'row',

@@ -40,14 +40,14 @@ const optionField = z.string().transform((value, ctx) => {
   if (label.length === 0) {
     ctx.addIssue({
       code: "custom",
-      message: "An option needs something in it",
+      message: "A choice needs something in it",
     });
     return z.NEVER;
   }
   if (label.length > MAX_OPTION_LABEL) {
     ctx.addIssue({
       code: "custom",
-      message: `Keep each option under ${MAX_OPTION_LABEL} characters`,
+      message: "Keep each choice short",
     });
     return z.NEVER;
   }
@@ -58,12 +58,12 @@ export const createPollSchema = z.object({
   title: z
     .string()
     .trim()
-    .min(1, "Give it a name so people know what they're answering")
+    .min(1, "Type the question")
     .max(80, "Keep it under 80 characters"),
   options: z
     .array(optionField)
     .min(1, "Give people something to choose from")
-    .max(MAX_OPTIONS, `Offer at most ${MAX_OPTIONS} options`),
+    .max(MAX_OPTIONS, `Six choices at most`),
 });
 
 export const replySchema = z.object({

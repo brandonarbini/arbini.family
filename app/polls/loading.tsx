@@ -1,8 +1,10 @@
-export default function LoadingPolls() {
+import { SkeletonSection } from "@/components/ui/skeleton";
+
+export default function LoadingAsks() {
   return (
-    <div className="animate-pulse space-y-6" aria-busy>
-      <div className="h-16 rounded-xl bg-muted" />
-      <div className="h-48 rounded-xl bg-muted" />
+    <div aria-busy>
+      <SkeletonSection lines={3} />
+      <SkeletonSection lines={2} />
     </div>
   );
 }

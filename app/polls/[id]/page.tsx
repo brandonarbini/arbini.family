@@ -36,10 +36,10 @@ export default async function PollPage({
   // A leader only when it actually leads: with nothing answered every option ties at zero, and
   // labelling the first one "best so far" would be the board inventing a preference nobody has
   // expressed yet.
+  // `ranked.length > 1` because "best so far" on the only choice is the board inventing a
+  // preference nobody expressed — which is exactly what the rest of this guard exists to prevent.
   const leader =
-    ranked[0] &&
-    ranked[0].yes > 0 &&
-    (!ranked[1] || ranked[1].yes < ranked[0].yes)
+    ranked.length > 1 && ranked[0].yes > 0 && ranked[1].yes < ranked[0].yes
       ? ranked[0]
       : null;
 
@@ -53,7 +53,17 @@ export default async function PollPage({
               Naming who asked is not decoration. Anyone may start a poll, and a poll that never
               says who started it quietly reads as something the parents do.
             */}
-            {poll.createdByName ? `${poll.createdByName} asked` : "Asked"}
+            {/*
+              "You asked" rather than "Brandon Arbini asked" to Brandon. The rule is stated twice
+              in this app and enforced in the mobile serializer, and the web ballot never got the
+              memo — it was also the only place that printed a full name, where every other surface
+              uses the first.
+            */}
+            {poll.createdById === actor.id
+              ? "You asked"
+              : poll.createdByName
+                ? `${firstName(poll.createdByName)} asked`
+                : null}
             {poll.status === "SETTLED" ? " · settled" : ""}
           </p>
           <ShareLink />
@@ -198,7 +208,7 @@ function Answer({
                 {firstName(member.name)}
               </span>
               <span className="text-[0.625rem] uppercase tracking-wider text-muted-foreground">
-                {kind === null ? "no word" : LABELS[kind]}
+                {kind === null ? "nothing said" : LABELS[kind]}
               </span>
             </li>
           );
@@ -337,7 +347,7 @@ function OptionRow({
 const LABELS: Record<ReplyKind, string> = {
   YES: "Yes",
   MAYBE: "Maybe",
-  NO: "Can't",
+  NO: "No",
 };
 
 /**
@@ -383,7 +393,7 @@ function describeAnswer(option: OptionView): string {
   if (parts.length === 0) return "Nobody answered this one.";
   const said = parts.join(", ");
   return silentBy.length > 0
-    ? `${said} — and ${silentBy.length} never answered.`
+    ? `${said} — and ${silentBy.length} didn't answer.`
     : said;
 }
 

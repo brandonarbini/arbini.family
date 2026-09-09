@@ -1,6 +1,7 @@
 import type { PollDto, PollMemberDto, PollOptionDto, ReplyKindDto } from '@server/api/v1/dto';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { LoadFailure } from '@/components/load-failure';
 import { Page } from '@/components/page';
 import { PersonBadge } from '@/components/person-badge';
 import { Copy, RuledList, Section } from '@/components/section';
@@ -21,19 +22,7 @@ export default function PollsScreen() {
 
   if (isPending) return <Page dateline="Loading">{null}</Page>;
 
-  if (error) {
-    return (
-      <Page dateline="Not loaded">
-        <Section title="Asks">
-          <Copy muted>
-            {error instanceof ApiError
-              ? error.message
-              : 'Could not reach the board. It may be the network.'}
-          </Copy>
-        </Section>
-      </Page>
-    );
-  }
+  if (error) return <LoadFailure title="Asks" error={error} onRetry={refetch} />;
 
   if (data.length === 0) {
     return (
@@ -69,7 +58,8 @@ function Poll({ poll }: { poll: PollDto }) {
   return (
     <Section title={poll.title}>
       <Copy muted style={styles.subhead}>
-        {settled ? 'Settled' : poll.awaitingYou ? 'Waiting on you' : 'Answered'}
+        {/* "You've answered" — "Answered" was a claim about the ask, printed when only you had. */}
+        {settled ? 'Settled' : poll.awaitingYou ? 'Waiting on you' : 'You’ve answered'}
         {poll.askedByName ? ` · asked by ${poll.askedByName.split(' ')[0]}` : ''}
       </Copy>
 

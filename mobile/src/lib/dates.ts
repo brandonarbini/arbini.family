@@ -155,5 +155,8 @@ export function describeRelativeDay(date: CalendarDateString, today: CalendarDat
   const days = daysBetween(today, date);
   if (days === 0) return 'Today';
   if (days === 1) return 'Tomorrow';
-  return formatWeekdayShort(date);
+  // Past a week, the weekday alone stops identifying a day: a 30-day agenda has four Saturdays and
+  // the column exists so the eye can run down *dates*. The web makes the same cut at seven days.
+  if (days > 1 && days <= 7) return formatWeekdayShort(date);
+  return formatShortDay(date);
 }

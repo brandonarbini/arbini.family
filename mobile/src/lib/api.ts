@@ -103,6 +103,8 @@ async function readErrorBody(response: Response): Promise<ApiErrorBody['error']>
   }
   return {
     code: response.status === 401 ? 'unauthenticated' : 'internal',
-    message: `The board returned ${response.status}.`,
+    // Not the status code. An HTTP number is a fact about a wire, and this string is read by a
+    // fifteen-year-old on a train; the number stays on `ApiError.status` for logging.
+    message: 'The board is having a bad day. Try again in a minute.',
   };
 }

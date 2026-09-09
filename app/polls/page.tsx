@@ -38,11 +38,8 @@ export default async function PollsPage() {
       <Section title="Open">
         {open.length === 0 ? (
           <p className="font-copy text-base text-muted-foreground">
-            Nothing open.{" "}
-            <Link href="/polls/new" className="underline underline-offset-4">
-              Ask them something
-            </Link>
-            .
+            {/* One call to action, not two — "Ask the family" is a filled button 100px above. */}
+            Nothing open.
           </p>
         ) : (
           <RuledList>
@@ -59,7 +56,7 @@ export default async function PollsPage() {
       </Section>
 
       {past.length > 0 ? (
-        <Section title="Past">
+        <Section title="Answered and closed">
           <RuledList>
             {past.map((poll) => (
               <PollRow
