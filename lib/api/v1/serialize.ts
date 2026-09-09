@@ -135,15 +135,19 @@ export function toBoardDto(
   view: BoardView,
   awaiting: BoardPoll[],
   viewerUserId: string,
+  viewerProfileId: string,
 ): BoardDto {
   return {
     today: view.today,
+    viewerProfileId,
     awaiting: toAwaitingDto(awaiting, viewerUserId),
     gathering: toGatheringDto(view.gathering),
-    // Names rather than ids, for the same reason the agenda resolves its own: the sentence the
-    // client renders is "Waiting on Macy and Tanner", and shipping the roster so every client can
-    // perform that join is work done twice to reach one answer.
-    unsaidNames: view.unsaidToday.map((member) => member.name),
+    // Ids alongside the names, unlike everywhere else that resolves to names only: the sentence
+    // the client renders is "Waiting on you and Tanner", and it cannot say "you" from a name.
+    unsaid: view.unsaidToday.map((member) => ({
+      profileId: member.profileId,
+      name: member.name,
+    })),
     presence: view.presence.map(toPresenceDto),
     gridDays: view.gridDays,
     grid: view.grid.map(toGridRowDto),

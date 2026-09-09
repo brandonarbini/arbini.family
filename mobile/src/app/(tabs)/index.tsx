@@ -172,10 +172,15 @@ function Gathering({ board }: { board: BoardDto }) {
   if (!gathering) {
     return (
       <Section title="All together">
-        {board.unsaidNames.length > 0 ? (
+        {board.unsaid.length > 0 ? (
           <>
             <Text style={[styles.lede, { color: theme.text }]}>
-              Waiting on {joinNames(board.unsaidNames)}
+              Waiting on{' '}
+              {joinNames(
+                board.unsaid.map((member) =>
+                  member.profileId === board.viewerProfileId ? 'you' : member.name.split(' ')[0],
+                ),
+              )}
             </Text>
             <Copy muted style={styles.ledeSub}>
               Say which days you’ll be around and the countdown starts.
@@ -205,11 +210,18 @@ function Gathering({ board }: { board: BoardDto }) {
   );
 }
 
-/** "Macy", "Macy and Tanner", "Macy, Tanner and Addison" — a sentence, not a list. */
+/**
+ * "Macy", "Macy and Tanner", "you, Macy and Tanner" — a sentence, not a list.
+ *
+ * "you" is hoisted to the front. The lede is the largest type on the board and it was naming the
+ * reader in the third person, in the one place the app shouts.
+ */
 function joinNames(names: string[]): string {
-  const firsts = names.map((name) => name.split(' ')[0]);
-  if (firsts.length <= 1) return firsts[0] ?? '';
-  return `${firsts.slice(0, -1).join(', ')} and ${firsts[firsts.length - 1]}`;
+  const ordered = names.includes('you')
+    ? ['you', ...names.filter((name) => name !== 'you')]
+    : names;
+  if (ordered.length <= 1) return ordered[0] ?? '';
+  return `${ordered.slice(0, -1).join(', ')} and ${ordered[ordered.length - 1]}`;
 }
 
 /**

@@ -148,6 +148,14 @@ export interface AwaitingPollDto {
 export interface BoardDto {
   /** The family's today, authoritative. */
   today: CalendarDateString;
+  /**
+   * Which of the five people is asking.
+   *
+   * The board is the most-read screen in the app and it was the only one that did not know. Every
+   * read therefore began with the same manual step — find my own name among five, then find my own
+   * row — while every other surface goes to real trouble to say "you" instead of "Brandon".
+   */
+  viewerProfileId: string;
   awaiting: AwaitingPollDto[];
   gathering: GatheringDto | null;
   /**
@@ -156,8 +164,12 @@ export interface BoardDto {
    * `gathering` is null whenever this is non-empty, and that is the point of sending both. The
    * countdown declines while anybody is unsaid — silence is never a yes — but declining without
    * saying why is how the board ended up with a headline that never said anything.
+   *
+   * Ids as well as names, unlike the tally arrays on a poll. Those answer "who said yes", which a
+   * name answers perfectly well; this one has to be able to say **you**, and a client holding
+   * names alone cannot tell which of the five it is looking at.
    */
-  unsaidNames: string[];
+  unsaid: { profileId: string; name: string }[];
   presence: PresenceDto[];
   /** The dates `GridRowDto.days` is indexed by, in order, starting at `today`. */
   gridDays: CalendarDateString[];

@@ -32,7 +32,7 @@ export default async function BoardPage() {
     <div>
       <YourTurn polls={awaiting} viewerUserId={user.id} />
       <Today board={board} />
-      <Gathering board={board} />
+      <Gathering board={board} viewerProfileId={user.profileId} />
       <Grid board={board} />
       <Agenda board={board} />
     </div>
@@ -157,14 +157,27 @@ function Today({ board }: { board: Board }) {
  * in silence of its own, and a headline that reads "nothing on the calendar yet" every day is a
  * headline nobody reads. Naming them turns the board's one dead section into its one ask.
  */
-function Gathering({ board }: { board: Board }) {
+function Gathering({
+  board,
+  viewerProfileId,
+}: {
+  board: Board;
+  viewerProfileId: string | null;
+}) {
   if (!board.gathering) {
     return (
       <Section title="All together">
         {board.unsaidToday.length > 0 ? (
           <>
             <p className="font-headline text-4xl leading-tight sm:text-5xl">
-              Waiting on {joinNames(board.unsaidToday.map((m) => m.name))}
+              Waiting on{" "}
+              {joinNames(
+                board.unsaidToday.map((member) =>
+                  member.profileId === viewerProfileId
+                    ? "you"
+                    : member.name.split(" ")[0],
+                ),
+              )}
             </p>
             <p className="font-copy mt-2 text-base text-muted-foreground">
               <Link
@@ -295,11 +308,20 @@ function Grid({ board }: { board: Board }) {
   );
 }
 
-/** "Macy", "Macy and Tanner", "Macy, Tanner and Addison" — a sentence, not a list. */
+/**
+ * "Macy", "Macy and Tanner", "you, Macy and Tanner" — a sentence, not a list.
+ *
+ * "you" is hoisted to the front, the same way the ballot's `list()` does it. The lede is the
+ * largest type on the board and it was reading "Waiting on Brandon, Jill, Tanner, Addison and
+ * Macy" to Brandon — naming the reader, in the third person, in the one place the app shouts.
+ * Every other surface here is careful about this; the newest one forgot.
+ */
 function joinNames(names: string[]): string {
-  const firsts = names.map((name) => name.split(" ")[0]);
-  if (firsts.length <= 1) return firsts[0] ?? "";
-  return `${firsts.slice(0, -1).join(", ")} and ${firsts[firsts.length - 1]}`;
+  const ordered = names.includes("you")
+    ? ["you", ...names.filter((name) => name !== "you")]
+    : names;
+  if (ordered.length <= 1) return ordered[0] ?? "";
+  return `${ordered.slice(0, -1).join(", ")} and ${ordered[ordered.length - 1]}`;
 }
 
 /**
