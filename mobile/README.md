@@ -85,7 +85,7 @@ src/components/     Section / RuledList / Copy / DateStamp — the newspaper pri
 src/constants/      theme.ts — tokens ported from the web's globals.css
 src/lib/            api.ts + queries.ts (the /api/v1 client), auth-client.ts, env.ts
 src/hooks/          color scheme + theme, and the session cookie an <Image> has to carry
-assets/             wordmark.svg + mark.svg, and the PNGs generated from them
+assets/             wordmark.svg + wordmark-stacked.svg + mark.svg, and the PNGs generated from them
 scripts/            build-assets.mjs
 ```
 
@@ -113,15 +113,25 @@ binary. They are handled differently:
   needed.
 - **P22 Stickley** (headlines) falls back to the platform serif, New York on iOS.
 
-If the wordmark is ever re-exported, two properties have to hold or it breaks quietly rather than
-loudly:
+There are two cuts of the wordmark, because they hang in differently shaped holes. `wordmark.svg` is
+the single line, for the in-app masthead, where the header is wide. `assets/wordmark-stacked.svg`
+breaks it over two lines for the splash, where the canvas is a whole portrait phone and a 6.7:1
+sliver leaves almost all of it empty. The stacked one is set by hand rather than derived by splitting
+the single line's per-letter paths: the split is trivial, the leading and the centring are not, since
+both words lead with a letter whose flourish reaches past the rest of the line.
+
+If either is ever re-exported, two properties have to hold or it breaks quietly rather than loudly:
 
 - **`fill="currentColor"` on every path, no hard-coded colour.** That is what lets one asset be ink
-  on paper and paper on ink; the component supplies the value through `color`. Illustrator exports
-  a literal hex (`#231f20` last time) and it has to be rewritten.
-- **A tight `viewBox` and no `width`/`height` attributes**, with `WORDMARK_ASPECT_RATIO` in
-  `wordmark.tsx` kept in step with it. A mismatch shows up as a subtly squashed wordmark, not an
-  error.
+  on paper and paper on ink; the component supplies the value through `color`, and
+  `build-assets.mjs` substitutes a literal hex per raster. Illustrator exports a literal hex
+  (`#231f20` both times) and it has to be rewritten.
+- **A tight `viewBox` and no `width`/`height` attributes.** For `wordmark.svg` that means
+  `WORDMARK_ASPECT_RATIO` in `wordmark.tsx` kept in step with it; a mismatch shows up as a subtly
+  squashed wordmark, not an error. For `wordmark-stacked.svg` it means tight on all four sides and
+  matching `WORDMARK` in `build-assets.mjs` — the script renders the whole box at scale and does not
+  trim, so padding baked into the viewBox becomes padding in the PNG, and expo-splash-screen then
+  centres the padded rectangle rather than the artwork.
 
 ### Icons and the splash
 
@@ -131,10 +141,11 @@ Every PNG in `assets/images/` is generated, not drawn:
 node scripts/build-assets.mjs     # needs ImageMagick: brew install imagemagick
 ```
 
-It reads two vectors and writes nine rasters. `assets/wordmark.svg` becomes the splash;
+It reads two vectors and writes nine rasters. `assets/wordmark-stacked.svg` becomes the splash;
 `assets/mark.svg` — the wordmark's initial `A`, the same path data lifted out — becomes the app
-icon, the Android adaptive layers and the web favicon. **Commit the PNGs**: Expo reads the rasters,
-so the vectors alone are not enough.
+icon, the Android adaptive layers and the web favicon. (`assets/wordmark.svg`, the single line, is
+the one vector the script does not touch: it is rendered at runtime by `wordmark.tsx`.) **Commit the
+PNGs**: Expo reads the rasters, so the vectors alone are not enough.
 
 Deriving them buys one thing worth the script. A colour is a token in one place rather than nine
 files that drift, and the icon is provably the same letterform as the masthead instead of an
@@ -148,6 +159,11 @@ Two details that are choices rather than defaults:
 - The mark is inset to 62% of the icon square, and only 45% of the Android foreground — Android's
   adaptive icon crops to a shape the launcher picks and clips anything outside the middle 66%. That
   is a safe zone, not a margin.
+- The splash rasters carry only the figure, on transparency; the ground is `backgroundColor` in
+  `app.json`. Light is the same paper-on-red as the icon, so the launch screen and the home-screen
+  tile agree. Dark inverts the relationship rather than the palette, the same move `icon-dark` and
+  `src/constants/theme.ts` make — red becomes the figure, so the splash recedes at night instead of
+  filling the screen with a flash of it.
 
 Standalone rules are drawn as a filled `View` with a `height`, never as a `borderTopWidth`. A
 border on a view with no intrinsic height silently fails to paint once the width goes sub-pixel,

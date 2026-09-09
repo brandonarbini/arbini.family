@@ -1,9 +1,11 @@
 /**
- * Regenerates every PNG in assets/images/ from the two SVGs in assets/.
+ * Regenerates every PNG in assets/images/ from assets/mark.svg and assets/wordmark-stacked.svg.
+ * (The third vector, assets/wordmark.svg, is the single-line masthead and is read by
+ * src/components/wordmark.tsx at runtime, not by this script.)
  *
  *   node scripts/build-assets.mjs
  *
- * Run it after editing assets/mark.svg or assets/wordmark.svg, then commit the PNGs — Expo reads
+ * Run it after editing either source vector, then commit the PNGs — Expo reads
  * the rasters, not the vectors, so the SVGs alone are not enough. The script exists so the icons
  * are *derived* rather than drawn: a colour change is an edit here and one command, not an
  * afternoon in a vector editor and nine files that drift apart.
@@ -26,10 +28,8 @@ const OUT = join(ROOT, 'assets', 'images');
 const TMP = mkdtempSync(join(tmpdir(), 'arbini-assets-'));
 
 const PAPER = '#F9F6F1';
-const INK = '#1A1511';
 const RED = '#AF2D18';
 const DARK_GROUND = '#100C0A';
-const DARK_INK = '#EEEBE5';
 const DARK_RED = '#D9553F';
 
 /**
@@ -38,7 +38,7 @@ const DARK_RED = '#D9553F';
  * that is off-centre by a hair rather than as an error.
  */
 const MARK = { x: 0, y: 1.2, w: 34.7, h: 38.3 };
-const WORDMARK = { x: 0, y: 0, w: 310.59, h: 46.21 };
+const WORDMARK = { x: 0, y: 0, w: 269.12, h: 148.16 };
 
 function pathOf(file) {
   const svg = readFileSync(join(ROOT, 'assets', file), 'utf8');
@@ -48,7 +48,7 @@ function pathOf(file) {
 }
 
 const markPath = pathOf('mark.svg')[0];
-const wordmarkPaths = pathOf('wordmark.svg');
+const wordmarkPaths = pathOf('wordmark-stacked.svg');
 
 function render(name, width, height, body) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
@@ -72,7 +72,7 @@ function square(name, size, { fraction, fill, background }) {
   );
 }
 
-/** The full wordmark on a transparent ground, sized by width. */
+/** The stacked wordmark on a transparent ground, sized by width. */
 function wordmark(name, width, fill) {
   const scale = width / WORDMARK.w;
   const height = Math.round(WORDMARK.h * scale);
@@ -98,10 +98,17 @@ square('android-icon-foreground', 512, { fraction: 0.45, fill: PAPER, background
 square('android-icon-monochrome', 432, { fraction: 0.45, fill: '#000000', background: null });
 render('android-icon-background', 512, 512, `<rect width="512" height="512" fill="${RED}"/>`);
 
-// The splash. Wide, because it is the masthead rather than the mark; expo-splash-screen sizes it
-// by `imageWidth` in points, so 1400px carries a 200pt image past 3x without softening.
-wordmark('splash-icon', 1400, INK);
-wordmark('splash-icon-dark', 1400, DARK_INK);
+// The splash: the wordmark stacked onto two lines, from assets/wordmark-stacked.svg rather than the
+// single-line cut the in-app masthead uses. A launch screen is a whole portrait phone, and a 6.7:1
+// sliver of a wordmark leaves almost all of it empty. expo-splash-screen sizes by `imageWidth` in
+// points, so 1200px carries the 240pt image past 3x with room to spare.
+//
+// Only the figure is drawn here; the ground is `backgroundColor` in app.json, which is why these are
+// transparent. Together they make the same paper-on-red as the icon in light mode, and dark inverts
+// the relationship the same way icon-dark does — red as the figure, so the splash recedes at night
+// instead of filling the screen with a flash of it.
+wordmark('splash-icon', 1200, PAPER);
+wordmark('splash-icon-dark', 1200, DARK_RED);
 
 // Favicon for `expo export --platform web`.
 square('favicon', 48, { fraction: 0.72, fill: PAPER, background: RED });
