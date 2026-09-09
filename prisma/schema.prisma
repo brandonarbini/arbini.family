@@ -244,11 +244,16 @@ model Event {
 }
 
 // ---------------------------------------------------------------------------
-// Polls
+// Polls — "asks", in the family's own word, which is what the interface calls them.
 //
-// "When are you free?" gets silence; "Thursday or Saturday?" gets answers. So the unit of
-// coordination is a poll with concrete dated options rather than an availability grid, and the
-// whole thing is reachable from one link somebody drops in the family chat.
+// "When are you free?" gets silence; "Thursday or Saturday?" gets answers. So the unit is a
+// question with concrete options rather than an open field, and the whole thing is reachable from
+// one link somebody drops in the family chat.
+//
+// The options used to be dates and only dates, because settling one wrote a stay and a stay needs
+// a day. Presence stopped being something a poll writes, and the restriction went with it: an
+// option is now a *choice* — "tacos", "pizza", "out" — that may carry a date when the question is
+// about a day. Most asks in a family are not about days at all.
 // ---------------------------------------------------------------------------
 
 enum PollStatus {
@@ -275,6 +280,18 @@ model Poll {
   settledOption   PollOption? @relation("PollSettledOption", fields: [settledOptionId], references: [id], onDelete: SetNull)
   settledAt       DateTime?   @map("settled_at")
 
+  // The last day this keeps asking. Written at creation and never inferred at read time.
+  //
+  // It exists because "Your turn" is the only thing in this app that nags, and something has to
+  // stop it. Liveness used to be derived from the option dates — a poll whose days had passed
+  // stopped nagging on its own — and free-text options have no dates to derive it from, so an
+  // unanswered "what's for dinner" would have sat on the board forever.
+  //
+  // Derived from the options when they carry dates, and two weeks out when they do not. A column
+  // rather than `createdAt + 14 days` at every call site, because a "camping in June?" asked in
+  // March needs to outlive the default and somebody has to be able to say so.
+  closesOn DateTime @map("closes_on") @db.Date
+
   // Nullable with SetNull, matching Event: a poll is a record of something the family decided,
   // and losing it because an account was removed is worse than losing the attribution for it.
   createdById String?  @map("created_by_id") @db.Uuid
@@ -292,17 +309,23 @@ model Poll {
   @@map("polls")
 }
 
-// A candidate date. `endsOn` is the *last day*, inclusive — the same convention as `Presence`, so a
-// single-day option has matching dates and a holiday week is the same shape with a wider range.
-// Weekly polls are almost always single days.
+// One thing the family can pick.
+//
+// Exactly one of `label` and `onDate` carries the option's identity, and which one it is says what
+// kind of question this is: "tacos" is a choice, the 19th of September is a day.
+//
+// `label` is null when the date *is* the label. It is tempting to write the formatted date into
+// the column instead and have one field to render, and that would freeze a display format into the
+// database — the rule the whole of `lib/dates.ts` exists to hold. So the client renders
+// `label ?? format(onDate)` and the format stays where formats belong.
 model PollOption {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  pollId    String   @map("poll_id") @db.Uuid
-  poll      Poll     @relation("PollOptions", fields: [pollId], references: [id], onDelete: Cascade)
-  startsOn  DateTime @map("starts_on") @db.Date
-  endsOn    DateTime @map("ends_on") @db.Date
-  sortOrder Int      @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pollId    String    @map("poll_id") @db.Uuid
+  poll      Poll      @relation("PollOptions", fields: [pollId], references: [id], onDelete: Cascade)
+  label     String?
+  onDate    DateTime? @map("on_date") @db.Date
+  sortOrder Int       @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   replies    PollReply[]
   settledFor Poll?       @relation("PollSettledOption")

@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { getPoll } from "@/lib/board/data";
 
 /**
- * The preview a poll gets when its link is pasted into the family chat.
+ * The preview an ask gets when its link is pasted into the family chat.
  *
  * This is not decoration. The link is how the feature reaches anyone, and a bare URL in a message
  * thread is materially less likely to be tapped than one that says what it is asking about.
@@ -12,7 +12,7 @@ import { getPoll } from "@/lib/board/data";
  * the title and how many dates are on offer: enough to be worth tapping, and nothing about who
  * replied.
  */
-export const alt = "A poll";
+export const alt = "An ask";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -23,7 +23,7 @@ export default async function Image({
 }) {
   const { id } = await params;
   const poll = await getPoll(id);
-  const title = poll?.title ?? "A poll";
+  const title = poll?.title ?? "An ask";
   const count = poll?.options.length ?? 0;
 
   return new ImageResponse(
@@ -47,7 +47,7 @@ export default async function Image({
       <div style={{ display: "flex", fontSize: 34, color: "#8a8175" }}>
         {count === 0
           ? "Tap to answer"
-          : `${count} date${count === 1 ? "" : "s"} · tap to say which work`}
+          : `${count} choice${count === 1 ? "" : "s"} · tap to answer`}
       </div>
     </div>,
     size,

@@ -39,8 +39,9 @@ function member(
 function poll(replies: { profileId: string; kind: ReplyKind }[]): BoardPoll {
   return {
     id: "poll-1",
-    title: "A weekend",
+    title: "What's for dinner?",
     status: PollStatus.OPEN,
+    closesOn: "2026-09-15",
     settledOptionId: null,
     createdById: "u-p-brandon",
     createdByName: "Brandon Arbini",
@@ -48,8 +49,8 @@ function poll(replies: { profileId: string; kind: ReplyKind }[]): BoardPoll {
     options: [
       {
         optionId: "opt-1",
-        startsOn: "2026-10-03",
-        endsOn: "2026-10-04",
+        label: "Tacos",
+        onDate: null,
         sortOrder: 0,
         replies: replies.map((reply) => ({ optionId: "opt-1", ...reply })),
       },

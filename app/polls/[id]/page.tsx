@@ -17,7 +17,7 @@ import { canManagePoll } from "@/lib/board/permissions";
 import { formatCalendarDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "A poll — Arbini Family" };
+export const metadata = { title: "An ask — Arbini Family" };
 
 export default async function PollPage({
   params,
@@ -60,9 +60,7 @@ export default async function PollPage({
         </div>
       </div>
 
-      <Section
-        title={poll.status === "SETTLED" ? "The date" : "Which days work?"}
-      >
+      <Section title={poll.status === "SETTLED" ? "The answer" : "The choices"}>
         <div className="space-y-6">
           {options.map((option) => (
             <OptionRow
@@ -80,7 +78,7 @@ export default async function PollPage({
       </Section>
 
       {mayManage ? (
-        <Section title="This poll">
+        <Section title="This ask">
           <div className="flex flex-wrap items-center gap-3">
             {poll.status === "SETTLED" ? (
               <ReopenButton pollId={poll.id} />
@@ -90,7 +88,7 @@ export default async function PollPage({
               href={`/polls/new?from=${poll.id}`}
               className="font-copy text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
             >
-              Ask again next week
+              Ask again
             </Link>
           </div>
         </Section>
@@ -98,7 +96,7 @@ export default async function PollPage({
 
       <p className="font-copy text-sm text-muted-foreground">
         <Link href="/polls" className="underline underline-offset-4">
-          All polls
+          Everything the family&rsquo;s been asked
         </Link>
       </p>
     </div>
@@ -146,7 +144,7 @@ function OptionRow({
       )}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="font-headline text-2xl">{describeRange(option)}</h3>
+        <h3 className="font-headline text-2xl">{describeOption(option)}</h3>
         <p className="font-copy text-sm text-muted-foreground">
           {option.isSettled
             ? "That's the one"
@@ -155,8 +153,8 @@ function OptionRow({
               // prompt to do something that no longer needs doing.
               settled
               ? `${option.tally.yes} yes`
-              : option.tally.everyoneCanMake
-                ? "Everyone can make it"
+              : option.tally.unanimous
+                ? "Everyone said yes"
                 : summarize(option, nameOf)}
         </p>
       </div>
@@ -225,9 +223,9 @@ function OptionRow({
           <SettleButton
             pollId={pollId}
             optionId={option.optionId}
-            label={`It's ${describeRange(option)}`}
+            label={`It's ${describeOption(option)}`}
           />
-          {isBest && !option.tally.everyoneCanMake ? (
+          {isBest && !option.tally.unanimous ? (
             <span className="font-copy text-xs text-muted-foreground">
               Best so far
             </span>
@@ -244,20 +242,28 @@ const LABELS: Record<ReplyKind, string> = {
   NO: "Can't",
 };
 
-/** A single day reads as a day; a range reads as a range. Same row, two shapes. */
-function describeRange(option: { startsOn: string; endsOn: string }): string {
-  if (option.startsOn === option.endsOn) {
-    return formatCalendarDate(option.startsOn, "EEE d MMM");
-  }
-  return `${formatCalendarDate(option.startsOn, "EEE d")}–${formatCalendarDate(option.endsOn, "EEE d MMM")}`;
+/**
+ * What the option says.
+ *
+ * The date is formatted here rather than written into the column at creation. Freezing "Sat 19
+ * Sep" into the database would be a display format stored as data, which is the thing the whole of
+ * `lib/dates.ts` exists to prevent — and it would mean an ask made last year rendering in last
+ * year's format beside one made today.
+ */
+function describeOption(option: {
+  label: string | null;
+  onDate: string | null;
+}): string {
+  if (option.label !== null) return option.label;
+  return formatCalendarDate(option.onDate!, "EEE d MMM");
 }
 
 /**
  * Who is still to answer, or who cannot make it — named, never counted.
  *
- * "Waiting on Macy" is something somebody can act on; "3 of 5" is a scoreboard. Naming who cannot
- * make a date next to the away line above also keeps a blocker a *circumstance* — Addison is at
- * Vanguard — rather than a person to be talked out of it.
+ * "Waiting on Macy" is something somebody can act on; "3 of 5" is a scoreboard. Naming who said no
+ * next to the away line above also keeps a blocker a *circumstance* — Addison is at Vanguard —
+ * rather than a person to be talked out of it.
  */
 function summarize(
   option: OptionView,
@@ -265,7 +271,7 @@ function summarize(
 ): string {
   const { silentBy, noBy } = option.tally;
   if (silentBy.length > 0) return `Waiting on ${list(silentBy.map(nameOf))}`;
-  if (noBy.length > 0) return `${list(noBy.map(nameOf))} can't make it`;
+  if (noBy.length > 0) return `${list(noBy.map(nameOf))} said no`;
   return `${option.tally.yes} yes, ${option.tally.maybe} maybe`;
 }
 

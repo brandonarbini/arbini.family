@@ -291,25 +291,31 @@ export interface PollMemberDto {
 }
 
 /**
- * One date option on a poll, already tallied.
+ * One option on an ask, already tallied.
+ *
+ * Exactly one of `label` and `onDate` carries what the option says, and which one it is says what
+ * kind of question this is: "tacos" is a choice, the 19th of September is a day. `label` is null
+ * when the date is the whole of it, and the client renders `label ?? format(onDate)` — the format
+ * stays on the client because a date written into the database at creation is a display format
+ * frozen as data.
  *
  * Names rather than profile ids, for the same reason the agenda resolves its own: the server holds
  * the roster, and shipping it so every client can perform the same join is work done twice to
  * reach one answer.
  *
  * `silentNames` is who has not answered *this* option. Deliberately not folded into `no` — silence
- * is not a refusal, and a tally that treated it as one would settle dates nobody agreed to.
+ * is not a refusal, and a tally that treated it as one would settle on things nobody agreed to.
  */
 export interface PollOptionDto {
   id: string;
-  startsOn: CalendarDateString;
-  endsOn: CalendarDateString;
+  label: string | null;
+  onDate: CalendarDateString | null;
   yesNames: string[];
   maybeNames: string[];
   noNames: string[];
   silentNames: string[];
   /** Every single person said yes — not merely that nobody said no. */
-  everyoneCanMake: boolean;
+  unanimous: boolean;
   /** The viewer's own answer to this option, or null if they have not given one. */
   myReply: ReplyKindDto | null;
   /** True when the poll settled on this option. */
@@ -328,6 +334,13 @@ export interface PollDto {
   id: string;
   title: string;
   status: PollStatusDto;
+  /**
+   * The last day this keeps asking.
+   *
+   * Sent because the client separates open asks from past ones, and it can no longer work that out
+   * from the options: a question whose choices are "tacos" and "pizza" has no date to have passed.
+   */
+  closesOn: CalendarDateString;
   /** Who asked, or null when that is the viewer themselves — see `AwaitingPollDto`. */
   askedByName: string | null;
   /** True while any option is still waiting on the viewer. */

@@ -3,7 +3,7 @@ import "server-only";
 import { PollStatus, type ReplyKind } from "@/generated/prisma/enums";
 import {
   type CalendarDate,
-  calendarDateFromDbDate,
+  addCalendarDays,
   dbDateFromCalendarDate,
 } from "@/lib/dates";
 import type { PresenceState } from "@/lib/presence/derive";
@@ -102,40 +102,76 @@ export function isValidRange(
  */
 
 export interface PollOptionInput {
-  startsOn: CalendarDate;
-  /** Last day of the option, inclusive — matching `Presence`. A single day has matching dates. */
-  endsOn: CalendarDate;
+  /** What the option says. Null when `onDate` is the whole of it. */
+  label: string | null;
+  /** The day this option is about, when it is about one. */
+  onDate: CalendarDate | null;
 }
 
 export interface PollInput {
   title: string;
-  /** The user who asked. Null only for a poll created outside a session. */
+  /** The user who asked. Null only for an ask created outside a session. */
   createdById: string | null;
   options: readonly PollOptionInput[];
+  /** The family's today, for working out when this stops asking. */
+  today: CalendarDate;
+}
+
+/** How long an ask with no dates in it keeps asking. */
+export const DEFAULT_OPEN_DAYS = 14;
+
+/**
+ * When an ask stops asking.
+ *
+ * The last day any option is about, or a fortnight out when none of them is about a day.
+ *
+ * Something has to stop it. "Your turn" on the board is the only thing in this app that nags, and
+ * liveness used to fall out of the option dates for free — a poll whose days had passed stopped
+ * nagging on its own. Free-text options have no dates to fall out of, so without this an
+ * unanswered "what's for dinner" would have sat there forever.
+ *
+ * Never earlier than the fortnight default, even when every option is a date in the past: an ask
+ * that arrives already closed can never be answered, and somebody proposing yesterday by mistake
+ * should be able to fix it rather than start again.
+ */
+export function closingDate(
+  options: readonly PollOptionInput[],
+  today: CalendarDate,
+): CalendarDate {
+  const floor = addCalendarDays(today, DEFAULT_OPEN_DAYS);
+  const latest = options.reduce<CalendarDate | null>(
+    (max, option) =>
+      option.onDate && (max === null || option.onDate > max)
+        ? option.onDate
+        : max,
+    null,
+  );
+  return latest !== null && latest > floor ? latest : floor;
 }
 
 /**
- * Create a poll and its options in one transaction.
+ * Create an ask and its options in one transaction.
  *
- * `sortOrder` is assigned here from the *sorted* options rather than from input order, so the
- * ballot reads chronologically however the form happened to submit them. Duplicate dates are
- * dropped: two identical options are not a choice, and a tally split across them would understate
- * both.
+ * `sortOrder` is assigned from input order rather than from the dates, which is the whole of what
+ * changed when options stopped being dates. For a dinner the order is the order somebody thought
+ * of them, and for a set of days the form hands them over sorted already — so one rule covers
+ * both, and neither needs the ballot to re-derive anything.
  */
 export async function createPoll(input: PollInput): Promise<{ id: string }> {
   const options = normalizeOptions(input.options);
   if (options.length === 0) {
-    throw new Error("A poll needs at least one date");
+    throw new Error("An ask needs at least one option");
   }
 
   const poll = await prisma.poll.create({
     data: {
       title: input.title.trim(),
       createdById: input.createdById,
+      closesOn: dbDateFromCalendarDate(closingDate(options, input.today)),
       options: {
         create: options.map((option, index) => ({
-          startsOn: dbDateFromCalendarDate(option.startsOn),
-          endsOn: dbDateFromCalendarDate(option.endsOn),
+          label: option.label,
+          onDate: option.onDate ? dbDateFromCalendarDate(option.onDate) : null,
           sortOrder: index,
         })),
       },
@@ -177,10 +213,10 @@ export async function clearReply(
 }
 
 /**
- * Settle a poll on one of its own options, and put the date on the board.
+ * Settle an ask on one of its own options.
  *
- * The option is looked up scoped to the poll first. Without that scope a caller could settle a
- * poll on an option belonging to a different one, and the ballot would then render a chosen date
+ * The option is looked up scoped to the poll first. Without that scope a caller could settle one
+ * ask on an option belonging to a different one, and the ballot would then render a chosen answer
  * that appears nowhere among its own choices.
  *
  * Returns false rather than throwing on a mismatch, so the action can turn it into a field error;
@@ -188,18 +224,20 @@ export async function clearReply(
  *
  * ## What settling writes
  *
- * One `Event`, and nothing else. The whole point of settling is that the date lands on the
- * board's agenda rather than living inside a poll nobody reopens.
+ * An `Event`, but only when the chosen option is about a *day*. The agenda is a list of dates, and
+ * a family that has settled on tacos has not settled on a date — filing "What's for dinner Friday?
+ * — Tacos" against a day would be putting an answer where the board keeps appointments. Settling
+ * such an ask records the answer on the ask itself, which is where anybody would look for it.
  *
  * It used to also write a stay for everybody who said yes, because under the place-based model
  * that was the only thing putting a person anywhere — saying yes to a date *was* the location
- * signal. That coupling is gone, and good riddance: answering a poll should not quietly assert
- * where you will be for two days. Somebody who says yes and means it says so on their strip, and
- * the strip is one tap.
+ * signal. That coupling is gone, and good riddance: answering an ask should not quietly assert
+ * where you will be for two days. Somebody who says yes and means it says so on their strip.
  *
- * The event is written in a transaction that first clears anything a previous settlement left, so
- * settle → reopen → settle elsewhere leaves no ghosts. That idempotence is what makes this safe
- * to press twice.
+ * The write happens in a transaction that first clears anything a previous settlement left, so
+ * settle → reopen → settle elsewhere leaves no ghosts. That idempotence is what makes this safe to
+ * press twice, and it is also what makes settling *away* from a dated option take its event back
+ * off the board.
  */
 export async function settlePoll(
   pollId: string,
@@ -213,12 +251,12 @@ export async function settlePoll(
 
   const option = await prisma.pollOption.findFirst({
     where: { id: optionId, pollId },
-    select: { id: true, startsOn: true, endsOn: true },
+    select: { id: true, label: true, onDate: true },
   });
   if (!option) return false;
 
   await prisma.$transaction([
-    // Clear a previous settlement before writing this one, or the board accumulates every date
+    // Clear a previous settlement before writing this one, or the agenda accumulates every date
     // the family ever considered.
     prisma.event.deleteMany({ where: { pollId } }),
     prisma.poll.update({
@@ -229,24 +267,28 @@ export async function settlePoll(
         settledAt: new Date(),
       },
     }),
-    prisma.event.create({
-      data: {
-        title: poll.title,
-        // `Event` carries a single date, so a multi-day option is filed on its first day and says
-        // so in the note. Widening the event model for this would ripple through the agenda for
-        // the sake of a case the family hits a few times a year.
-        date: option.startsOn,
-        note: spansMoreThanOneDay(option) ? describeSpan(option) : null,
-        createdById: poll.createdById,
-        pollId,
-      },
-    }),
+    ...(option.onDate
+      ? [
+          prisma.event.create({
+            data: {
+              title: poll.title,
+              date: option.onDate,
+              // The option's own words, when it had any beyond the date. "Camping — which
+              // weekend?" with "the long one" chosen reads better on the agenda than either half
+              // alone.
+              note: option.label,
+              createdById: poll.createdById,
+              pollId,
+            },
+          }),
+        ]
+      : []),
   ]);
 
   return true;
 }
 
-/** Reopen a settled poll — somebody's plans changed, which is ordinary. */
+/** Reopen a settled ask — somebody's plans changed, which is ordinary. */
 export async function reopenPoll(pollId: string): Promise<void> {
   // The agenda has to stop claiming a date the moment the family stops agreeing on one, so the
   // derived event goes back out in the same transaction that reopens the poll.
@@ -259,48 +301,47 @@ export async function reopenPoll(pollId: string): Promise<void> {
   ]);
 }
 
-function spansMoreThanOneDay(option: {
-  startsOn: Date;
-  endsOn: Date;
-}): boolean {
-  return option.startsOn.getTime() !== option.endsOn.getTime();
-}
-
-function describeSpan(option: { startsOn: Date; endsOn: Date }): string {
-  return `${calendarDateFromDbDate(option.startsOn)} to ${calendarDateFromDbDate(option.endsOn)}`;
-}
-
 export async function deletePoll(pollId: string): Promise<void> {
   await prisma.poll.delete({ where: { id: pollId } });
 }
 
 /**
- * Sorted, de-duplicated, and validated.
+ * De-duplicated, trimmed, and in the order they were given.
  *
- * Duplicate dates are dropped rather than rejected: submitting the same day twice is a slip, not
- * a decision, and splitting a tally across two identical options would understate both of them.
+ * Duplicates are dropped rather than rejected: offering the same thing twice is a slip, not a
+ * decision, and splitting a tally across two identical options would understate both. Labels are
+ * compared case-insensitively after trimming, because "Tacos" and "tacos" are one choice and a
+ * ballot showing both is a ballot that cannot be won.
  *
- * Exported for the same reason `isValidRange` is — this module is callable without going through
- * a form, so the guard has to live here and be testable directly.
+ * An option with neither a label nor a date says nothing and is dropped — the empty rows a
+ * repeating text field leaves behind, rather than an error somebody has to clear.
+ *
+ * Not sorted. That is the change: sorting by date was right when every option was a date, and is
+ * wrong the moment one of them is "tacos".
+ *
+ * Exported because this module is callable without going through a form, so the guard has to live
+ * here and be testable directly.
  */
 export function normalizeOptions(
   options: readonly PollOptionInput[],
 ): PollOptionInput[] {
   const seen = new Set<string>();
   const kept: PollOptionInput[] = [];
+
   for (const option of options) {
-    if (!isValidRange(option.startsOn, option.endsOn)) {
-      throw new Error(
-        `Option ends (${option.endsOn}) before it starts (${option.startsOn})`,
-      );
-    }
-    const key = `${option.startsOn}/${option.endsOn}`;
+    const label = option.label?.trim() ? option.label.trim() : null;
+    if (label === null && option.onDate === null) continue;
+
+    // A date and a label are different kinds of thing, so they cannot collide: "19 Sep" typed as
+    // a label is a choice that happens to read like a day, and the family may legitimately have
+    // both on one ask.
+    const key = option.onDate
+      ? `date:${option.onDate}`
+      : `label:${label!.toLocaleLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    kept.push(option);
+    kept.push({ label, onDate: option.onDate });
   }
-  return kept.sort(
-    (a, b) =>
-      a.startsOn.localeCompare(b.startsOn) || a.endsOn.localeCompare(b.endsOn),
-  );
+
+  return kept;
 }

@@ -25,16 +25,14 @@ export async function GET(): Promise<Response> {
     ]);
 
     const live = polls.filter(
-      (poll) =>
-        poll.status === "SETTLED" ||
-        poll.options.some((option) => option.endsOn >= today),
+      (poll) => poll.status === "SETTLED" || poll.closesOn >= today,
     );
 
     return jsonOk(
       live.map((poll) => toPollDto(poll, members, actor.profileId, actor.id)),
     );
   } catch (error) {
-    console.error("[api/v1/polls] failed to load polls", error);
-    return apiError("internal", "The polls could not be loaded.");
+    console.error("[api/v1/polls] failed to load asks", error);
+    return apiError("internal", "The asks could not be loaded.");
   }
 }

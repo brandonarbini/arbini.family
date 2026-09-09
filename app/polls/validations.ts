@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isCalendarDate } from "@/lib/dates";
 
 /**
- * Input schemas for polls.
+ * Input schemas for asks.
  *
  * Shared by both routes rather than kept route-private: `/polls/new` creates and `/polls/[id]`
  * answers, but the "Ask again" button on the ballot submits a *creation*, so the create schema is
@@ -10,35 +10,48 @@ import { isCalendarDate } from "@/lib/dates";
  * action validates against exactly the schema the form was built from.
  */
 
-const calendarDate = z
-  .string()
-  .refine(isCalendarDate, "Use a real date (YYYY-MM-DD)");
-
 /** More than this and the ballot is a grid, which nobody fills in. */
 export const MAX_OPTIONS = 6;
 
+/** Long enough for "the long weekend in October", short enough to read on one line of a ballot. */
+export const MAX_OPTION_LABEL = 60;
+
 /**
- * A date option, encoded as `startsOn:endsOn` in a single form field.
+ * One option, encoded as `label` or `@date` in a single form field.
  *
- * One field per option rather than paired `startsOn[]`/`endsOn[]` arrays, because `FormData`
- * gives no guarantee that two same-named lists interleave — a dropped value in one would silently
- * pair every subsequent start with the wrong end.
+ * One field per option rather than paired `label[]`/`onDate[]` arrays, because `FormData` gives no
+ * guarantee that two same-named lists interleave — a dropped value in one would silently pair
+ * every subsequent label with the wrong date. The same reason the date pair was one field before.
+ *
+ * A leading `@` marks a date, and is not an escape anybody has to think about: the two ways of
+ * adding an option are separate controls, and only the day strip ever writes one.
  */
-const optionPair = z.string().transform((value, ctx) => {
-  const [startsOn, endsOn] = value.split(":");
-  if (!isCalendarDate(startsOn) || !isCalendarDate(endsOn)) {
-    ctx.addIssue({ code: "custom", message: "That isn't a real date" });
-    return z.NEVER;
+const optionField = z.string().transform((value, ctx) => {
+  if (value.startsWith("@")) {
+    const onDate = value.slice(1);
+    if (!isCalendarDate(onDate)) {
+      ctx.addIssue({ code: "custom", message: "That isn't a real date" });
+      return z.NEVER;
+    }
+    return { label: null, onDate };
   }
-  // Inclusive, matching `Presence`: a single day has matching dates, so equal is legitimate.
-  if (endsOn < startsOn) {
+
+  const label = value.trim();
+  if (label.length === 0) {
     ctx.addIssue({
       code: "custom",
-      message: "A date can't end before it starts",
+      message: "An option needs something in it",
     });
     return z.NEVER;
   }
-  return { startsOn, endsOn };
+  if (label.length > MAX_OPTION_LABEL) {
+    ctx.addIssue({
+      code: "custom",
+      message: `Keep each option under ${MAX_OPTION_LABEL} characters`,
+    });
+    return z.NEVER;
+  }
+  return { label, onDate: null };
 });
 
 export const createPollSchema = z.object({
@@ -48,9 +61,9 @@ export const createPollSchema = z.object({
     .min(1, "Give it a name so people know what they're answering")
     .max(80, "Keep it under 80 characters"),
   options: z
-    .array(optionPair)
-    .min(1, "Pick at least one date")
-    .max(MAX_OPTIONS, `Pick at most ${MAX_OPTIONS} dates`),
+    .array(optionField)
+    .min(1, "Give people something to choose from")
+    .max(MAX_OPTIONS, `Offer at most ${MAX_OPTIONS} options`),
 });
 
 export const replySchema = z.object({
@@ -70,9 +83,7 @@ export const settlePollSchema = z.object({
 
 export const deletePollSchema = z.object({ pollId: z.uuid() });
 
-export { calendarDate };
-
-/** What every poll action returns. Errors are values, never thrown — see `actions.ts`. */
+/** What every ask action returns. Errors are values, never thrown — see `actions.ts`. */
 export type ActionResult =
   | { ok: true }
   | { ok: false; formError?: string; fieldErrors?: Record<string, string[]> };

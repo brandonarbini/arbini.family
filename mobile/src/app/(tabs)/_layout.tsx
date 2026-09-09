@@ -45,7 +45,7 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="polls">
-        <NativeTabs.Trigger.Label>Polls</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Asks</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" drawable="ic_menu_sort_by_size" />
       </NativeTabs.Trigger>
 

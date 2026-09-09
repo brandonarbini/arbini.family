@@ -27,12 +27,13 @@ async function makeProfile(name: string, role: FamilyRole = FamilyRole.KID) {
 
 async function makePoll(createdById: string | null = null) {
   return createPoll({
-    title: "Thursday or Saturday?",
+    title: "What's for dinner?",
     createdById,
     options: [
-      { startsOn: "2099-12-03", endsOn: "2099-12-03" },
-      { startsOn: "2099-12-05", endsOn: "2099-12-05" },
+      { label: "Tacos", onDate: null },
+      { label: "Pizza", onDate: null },
     ],
+    today: "2099-12-01",
   });
 }
 

@@ -9,7 +9,7 @@ import {
   calendarDateFromDbDate,
   dbDateFromCalendarDate,
 } from "@/lib/dates";
-import type { PollOptionWindow, PollReplyRecord } from "@/lib/polls/tally";
+import type { PollOptionRef, PollReplyRecord } from "@/lib/polls/tally";
 import type { PresenceWindow } from "@/lib/presence/derive";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -278,7 +278,11 @@ export async function getPollForOption(
   return option ? { pollId: option.pollId, status: option.poll.status } : null;
 }
 
-export interface BoardPollOption extends PollOptionWindow {
+export interface BoardPollOption extends PollOptionRef {
+  /** What the option says. Null when the date *is* the label — see the column's comment. */
+  label: string | null;
+  /** The day this option is about, when it is about one. */
+  onDate: CalendarDate | null;
   replies: PollReplyRecord[];
 }
 
@@ -286,6 +290,8 @@ export interface BoardPoll {
   id: string;
   title: string;
   status: PollStatus;
+  /** The last day this keeps asking. Written at creation, never inferred here. */
+  closesOn: CalendarDate;
   settledOptionId: string | null;
   createdById: string | null;
   createdByName: string | null;
@@ -354,6 +360,7 @@ const POLL_SELECT = {
   id: true,
   title: true,
   status: true,
+  closesOn: true,
   settledOptionId: true,
   createdById: true,
   createdBy: { select: { name: true } },
@@ -361,11 +368,11 @@ const POLL_SELECT = {
   options: {
     // `sortOrder` here and again in `sortOptions`: the query gives the rows a stable order, and
     // the pure sort makes that order total. Neither alone is enough.
-    orderBy: [{ sortOrder: "asc" }, { startsOn: "asc" }, { id: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: {
       id: true,
-      startsOn: true,
-      endsOn: true,
+      label: true,
+      onDate: true,
       sortOrder: true,
       replies: {
         orderBy: { profileId: "asc" },
@@ -386,14 +393,15 @@ function toBoardPoll(poll: PollRow): BoardPoll {
     id: poll.id,
     title: poll.title,
     status: poll.status,
+    closesOn: calendarDateFromDbDate(poll.closesOn),
     settledOptionId: poll.settledOptionId,
     createdById: poll.createdById,
     createdByName: poll.createdBy?.name ?? null,
     createdAt: poll.createdAt,
     options: poll.options.map((option) => ({
       optionId: option.id,
-      startsOn: calendarDateFromDbDate(option.startsOn),
-      endsOn: calendarDateFromDbDate(option.endsOn),
+      label: option.label,
+      onDate: option.onDate ? calendarDateFromDbDate(option.onDate) : null,
       sortOrder: option.sortOrder,
       replies: option.replies.map((reply) => ({
         optionId: option.id,

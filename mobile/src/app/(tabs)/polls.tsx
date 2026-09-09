@@ -11,7 +11,7 @@ import { formatShortDay } from '@/lib/dates';
 import { useAnswerPoll, useMe, usePolls } from '@/lib/queries';
 
 /**
- * The ballots: what has been asked, and what you said.
+ * The asks: what the family has been asked, and what you said.
  *
  * Answering is the whole point of this screen on a phone — asking is a desk job, and settling is
  * a decision somebody makes once. Both stay on the web until there is a reason to move them.
@@ -24,7 +24,7 @@ export default function PollsScreen() {
   if (error) {
     return (
       <Page dateline="Not loaded">
-        <Section title="Polls">
+        <Section title="Asks">
           <Copy muted>
             {error instanceof ApiError
               ? error.message
@@ -37,7 +37,7 @@ export default function PollsScreen() {
 
   if (data.length === 0) {
     return (
-      <Page dateline="Polls">
+      <Page dateline="Asks">
         <Section title="Nothing asked">
           <Copy muted>
             When somebody asks the family a question, it turns up here. Start one on the website.
@@ -53,7 +53,7 @@ export default function PollsScreen() {
 
   return (
     <Page
-      dateline="Polls"
+      dateline="Asks"
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
     >
       {ordered.map((poll) => (
@@ -86,8 +86,13 @@ function Poll({ poll }: { poll: PollDto }) {
       </RuledList>
 
       {settled ? (
+        // Only a *dated* answer reaches the board — the agenda is a list of dates, and a family
+        // that settled on tacos has not settled on a date. Saying "the board has been updated"
+        // either way was true when settling wrote a stay per yes, and is a small lie now.
         <Copy muted style={styles.locked}>
-          The answer is in — the board has been updated to match.
+          {poll.options.some((option) => option.isSettled && option.onDate)
+            ? 'The answer is in, and it’s on the board.'
+            : 'The answer is in.'}
         </Copy>
       ) : null}
     </Section>
@@ -127,21 +132,21 @@ function Option({
     .map((name) => (me && name === me.name ? 'you' : name.split(' ')[0]))
     .sort((a, b) => (a === 'you' ? -1 : b === 'you' ? 1 : 0));
 
-  const dates =
-    option.startsOn === option.endsOn
-      ? formatShortDay(option.startsOn)
-      : `${formatShortDay(option.startsOn)} – ${formatShortDay(option.endsOn)}`;
+  // The date is formatted here rather than read off a column. Writing "19 Sep" into the database
+  // at creation would be a display format stored as data, which is the thing `lib/dates.ts` exists
+  // to prevent — and it would leave an ask made last year rendering in last year's format.
+  const says = option.label ?? formatShortDay(option.onDate!);
 
   return (
     <View>
       <View style={styles.optionHead}>
-        <Copy style={styles.dates}>{dates}</Copy>
+        <Copy style={styles.says}>{says}</Copy>
         {option.isSettled ? (
           <Text style={[styles.chosen, { color: theme.success, borderColor: theme.success }]}>
             CHOSEN
           </Text>
-        ) : option.everyoneCanMake ? (
-          // Not "nobody said no": silence is not consent, and a date declared possible because
+        ) : option.unanimous ? (
+          // Not "nobody said no": silence is not consent, and an answer declared agreed because
           // three people ignored it would be wrong in the way that matters most.
           <Text style={[styles.chosen, { color: theme.success, borderColor: theme.success }]}>
             ALL YES
@@ -247,7 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dates: {
+  says: {
     fontSize: 18,
   },
   chosen: {

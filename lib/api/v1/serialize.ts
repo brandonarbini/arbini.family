@@ -193,7 +193,7 @@ function toPresenceRunDto(run: BoardPresence): PresenceRunDto {
 // --- Polls -------------------------------------------------------------------
 
 /**
- * A poll, tallied and resolved to names.
+ * An ask, tallied and resolved to names.
  *
  * `viewerProfileId` decides two things the client should not have to work out: which answer is
  * "mine" on each option, and whether anything is still waiting on this person.
@@ -231,13 +231,13 @@ export function toPollDto(
 
     return {
       id: tally.optionId,
-      startsOn: window?.startsOn ?? "",
-      endsOn: window?.endsOn ?? "",
+      label: window?.label ?? null,
+      onDate: window?.onDate ?? null,
       yesNames: names(tally.yesBy),
       maybeNames: names(tally.maybeBy),
       noNames: names(tally.noBy),
       silentNames: names(tally.silentBy),
-      everyoneCanMake: tally.everyoneCanMake,
+      unanimous: tally.unanimous,
       myReply: mine?.kind ?? null,
       isSettled: poll.settledOptionId === tally.optionId,
       replyByProfileId,
@@ -248,6 +248,7 @@ export function toPollDto(
     id: poll.id,
     title: poll.title,
     status: poll.status,
+    closesOn: poll.closesOn,
     // Null when the viewer asked it — being told "Brandon is waiting on you" when you are Brandon
     // reads as a bug, so the decision is made here rather than left to each client to remember.
     askedByName: poll.createdById === viewerUserId ? null : poll.createdByName,

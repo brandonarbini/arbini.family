@@ -6,7 +6,7 @@ import { decide, removePoll } from "@/app/polls/actions";
 import { Button } from "@/components/ui/button";
 
 /**
- * Closing a poll.
+ * Closing an ask.
  *
  * Deliberately a person's decision rather than an automatic one. The tally makes the tradeoff
  * legible — who can make which date, and who cannot — but which date the family actually picks is
@@ -41,7 +41,7 @@ export function SettleButton({
   );
 }
 
-/** Reopening is ordinary — plans change, and a new poll would lose every answer. */
+/** Reopening is ordinary — plans change, and a new ask would lose every answer. */
 export function ReopenButton({ pollId }: { pollId: string }) {
   const [state, formAction, pending] = useActionState(decide, null);
 

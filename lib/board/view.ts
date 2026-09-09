@@ -172,14 +172,16 @@ export async function getBoardView(today: CalendarDate) {
 export type BoardView = Awaited<ReturnType<typeof getBoardView>>;
 
 /**
- * Live polls this person has not finished answering.
+ * Live asks this person has not finished answering.
  *
  * Read separately from `getBoardView` rather than folded into it, because it is the one thing on
  * the board that depends on *who is looking*. Threading a viewer through the board view would
  * make every one of its cached reads per-person for the sake of a single line.
  *
- * "Live" is derived from the option dates, so a poll nobody ever settled stops nagging once its
- * days have passed instead of sitting on the board forever.
+ * "Live" is `closesOn`, which is written at creation. It used to be derived from the option dates
+ * — a poll whose days had passed stopped nagging on its own — and that stopped working the moment
+ * an option could be "tacos". This is the only thing in the app that nags, so something has to
+ * close it.
  */
 export async function getPollsAwaiting(
   profileId: string,
@@ -190,7 +192,7 @@ export async function getPollsAwaiting(
 
   return polls.filter((poll) => {
     if (poll.status === "SETTLED") return false;
-    if (!poll.options.some((option) => option.endsOn >= today)) return false;
+    if (poll.closesOn < today) return false;
     const replies = poll.options.flatMap((option) => option.replies);
     return tallyPoll(poll.options, replies, profileIds).some((tally) =>
       tally.silentBy.includes(profileId),

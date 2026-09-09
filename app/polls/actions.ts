@@ -10,6 +10,7 @@ import {
   settlePollSchema,
 } from "@/app/polls/validations";
 import { requireProfile } from "@/lib/auth-helpers";
+import { todayInFamilyTz } from "@/lib/dates";
 import { BOARD_TAGS } from "@/lib/board/cache";
 import { getPollCreatorUserId } from "@/lib/board/data";
 import { canManagePoll, canReplyAsProfile } from "@/lib/board/permissions";
@@ -23,7 +24,7 @@ import {
 } from "@/lib/board/service";
 
 /**
- * Mutations for polls.
+ * Mutations for asks.
  *
  * The same thin shell as the Around strip: authenticate, validate, authorize, call the service,
  * invalidate. Failures are *returned* rather than thrown, because a thrown error reaches the
@@ -58,6 +59,9 @@ export async function startPoll(
     title: parsed.data.title,
     createdById: actor.id,
     options: parsed.data.options,
+    // Read here rather than in the service: `closingDate` keys off it, and a clock consulted
+    // inside a write is a clock no test can move.
+    today: todayInFamilyTz(),
   });
 
   updateTag(BOARD_TAGS.polls);
