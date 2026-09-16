@@ -17,6 +17,13 @@ import { env } from "@/lib/env/server";
  * silently does nothing is the failure mode this module is shaped to make impossible.
  */
 
+/**
+ * Not configuration. Postmark rejects a From address that is not a verified sender signature or a
+ * verified domain, so a value an operator could vary per environment is a value that can only be
+ * varied into a hard send-time failure. arbini.family is verified as a whole domain.
+ */
+const FROM_ADDRESS = "noreply@arbini.family";
+
 let client: ServerClient | null = null;
 
 function getClient(): ServerClient {
@@ -50,7 +57,7 @@ export async function sendMagicLinkEmail({
   ]);
 
   await getClient().sendEmail({
-    From: env.POSTMARK_FROM_EMAIL,
+    From: FROM_ADDRESS,
     To: email,
     Subject: "Sign in to Arbini Family",
     HtmlBody: html,

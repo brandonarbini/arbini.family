@@ -53,8 +53,8 @@ const serverSchema = z.object({
     .optional(),
 
   // --- Email (Postmark) — required everywhere --------------------------------
-  // Both required, with no environment conditional: there is no such thing as a legitimately
-  // blank token. Production carries the real server token and every other environment a Postmark
+  // Required, with no environment conditional: there is no such thing as a legitimately blank
+  // token. Production carries the real server token and every other environment a Postmark
   // *sandbox* server token, which accepts the message, shows it in Postmark's activity UI and
   // delivers nothing — so the whole path (render, API call, message id) is exercised locally
   // without mailing anyone real.
@@ -64,10 +64,12 @@ const serverSchema = z.object({
   // weeks pass before anyone notices the family stopped receiving magic links. Failing the parse
   // means a deployment that cannot send mail does not deploy.
   //
-  // Neither has a default in the committed `.env`, deliberately: a committed fallback is exactly
-  // what would mask the missing value in production. They live in `.env.local` and in Vercel.
+  // No default in the committed `.env`, deliberately: a committed fallback is exactly what would
+  // mask the missing value in production. It lives in `.env.local` and in Vercel.
+  //
+  // The From address is *not* here: it has to match a sender verified with Postmark, so it does
+  // not usefully vary per environment. It is a constant in lib/email.ts.
   POSTMARK_API_TOKEN: z.string().min(1),
-  POSTMARK_FROM_EMAIL: z.email(),
 
   // --- Native app (passkeys) -------------------------------------------------
   // The Apple Team ID is *not* here: it does not vary between environments, so it is a constant in
