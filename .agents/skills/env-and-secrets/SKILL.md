@@ -94,7 +94,8 @@ and notes go to stderr, so `pnpm --silent env:cloud | pbcopy` copies only what i
 
 ## Contract
 
-These must be true of this repository. `pnpm dev-env status` reports each one that is not.
+These must be true of this repository. Audit each bullet by reading the repo — no command here
+checks them.
 
 - git ignores `.env.local`, `.env.production` and `.env.development.local`, and does not ignore `.env`, `.devcontainer/.env`, `.env.example` or `.env.test`. — The policy is stated as behaviour rather than as lines because the negations depend on file order: `!.env.example` only works below the `.env.*` rule it negates. Bare `.env` and `.devcontainer/.env` match neither pattern, and a rule that swallows them is the expensive mistake: the committed `.env` carries the development defaults every bootstrap reads — devcontainer, Cursor VM, CI — so ignoring it leaves a fresh checkout with no baseline environment at all.
 - git ignores `.context/` and `.devcontainer/docker-compose.worktree.yml`. — Both are per-checkout scratch that dev-env or Conductor writes into a worktree; committed, they follow one machine's port allocation into everyone else's checkout.

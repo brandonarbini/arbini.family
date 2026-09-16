@@ -71,7 +71,7 @@ the tests themselves; do not write cleanup code of your own.
 
 Nothing shells out to set the database up any more: `vitest.global-setup.ts` builds the template
 database and each worker clones it. The retired simple tier's `.devcontainer/test-database.sh` is
-deleted by `pnpm dev-env apply`, and the `pretest`, `pretest:run` and `test:db:*` scripts that
+removed on the next dev-env apply, and the `pretest`, `pretest:run` and `test:db:*` scripts that
 invoked it have to go with it — left in `package.json` they initialize, reset or migrate an obsolete
 shared database before every run.
 
@@ -129,7 +129,8 @@ place. Never hand-edit a migration that has been applied anywhere, and never edi
 
 ## Contract
 
-These must be true of this repository. `pnpm dev-env status` reports each one that is not.
+These must be true of this repository. Audit each bullet by reading the repo — no command here
+checks them.
 
 - tsconfig maps `@/*` to the repository root — `{ "@/*": ["./*"] }`. — The owned harness imports `@/generated/prisma/client`; dev-env must not rewrite a project's tsconfig to fit, because forcing `@` to the root would break a src-aliased app's own imports.
 - prisma/schema.prisma declares a `prisma-client` generator whose `output` resolves to `generated/prisma` at the repository root — `output = "../generated/prisma"`. — Use the Prisma 7 `prisma-client` generator with `output = "../generated/prisma"` — the output is the _directory_, and Prisma emits `client.ts` inside it, which the harness imports as `@/generated/prisma/client`.
