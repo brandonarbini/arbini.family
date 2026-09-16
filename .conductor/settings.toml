@@ -18,7 +18,7 @@ icon = "wrench"
 available_in = ["local"]
 
 [scripts.run.seed]
-command = "devcontainer up --workspace-folder . >/dev/null && devcontainer exec --workspace-folder . pnpm db:seed"
+command = "devcontainer up --workspace-folder . >/dev/null && devcontainer exec --workspace-folder . env NODE_ENV=development pnpm db:seed"
 icon = "sprout"
 available_in = ["local"]
 
