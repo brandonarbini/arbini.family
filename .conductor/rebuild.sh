@@ -4,5 +4,7 @@ set -euo pipefail
 cd "${CONDUCTOR_WORKSPACE_PATH:-$PWD}"
 case "${1:-}" in "") extra=() ;; --no-cache) extra=(--build-no-cache) ;; *) echo "usage: $0 [--no-cache]" >&2; exit 2 ;; esac
 devcontainer up --workspace-folder . --remove-existing-container "${extra[@]}" >/dev/null
-devcontainer exec --workspace-folder . pnpm db:seed
+# NODE_ENV scoped to the seed, not the container: a demo-data guard wants it explicit, while Next
+# and Vitest would both inherit a container-wide value and misbehave under it.
+devcontainer exec --workspace-folder . env NODE_ENV=development pnpm db:seed
 echo "Devcontainer rebuilt."
