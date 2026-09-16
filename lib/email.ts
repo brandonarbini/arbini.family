@@ -10,24 +10,17 @@ import { env } from "@/lib/env/server";
 /**
  * Transactional email, sent through Postmark.
  *
- * Postmark is optional configuration. When it is absent — the default on a fresh clone — sending
- * degrades to logging the link, so the sign-in flow is exercisable locally without a token. That
- * fallback is deliberately restricted to development: a magic link in a deployed log is a
- * credential sitting in a log aggregator, readable by anyone with access to it long after the
- * fifteen-minute expiry would have closed the window on the intended recipient.
+ * Postmark is required configuration, in every environment (lib/env/server.ts says why). Outside
+ * production the token is a *sandbox* server token: the send really happens and the message is
+ * readable in Postmark's activity UI, but nothing is delivered, so no real address is ever mailed
+ * from a development run. There is no not-configured branch here on purpose — a send that
+ * silently does nothing is the failure mode this module is shaped to make impossible.
  */
 
 let client: ServerClient | null = null;
 
-export function isEmailConfigured(): boolean {
-  return Boolean(env.POSTMARK_API_TOKEN && env.POSTMARK_FROM_EMAIL);
-}
-
 function getClient(): ServerClient {
   if (!client) {
-    if (!env.POSTMARK_API_TOKEN) {
-      throw new Error("POSTMARK_API_TOKEN is not configured");
-    }
     client = new ServerClient(env.POSTMARK_API_TOKEN);
   }
   return client;
@@ -44,18 +37,10 @@ export async function sendMagicLinkEmail({
   url,
   expiresInMinutes,
 }: SendMagicLinkParams): Promise<void> {
-  if (!isEmailConfigured()) {
-    if (env.NODE_ENV === "production") {
-      // Loud, and without the link: the operator needs to know sign-in is broken, and the log is
-      // not a safe place to put a working credential.
-      console.error(
-        "[email] Postmark is not configured — no magic link was sent",
-      );
-      return;
-    }
-    console.warn(`[email] Postmark not configured — magic link: ${url}`);
+  // Alongside the send, never instead of it. A sandbox token means the mail is not delivered
+  // anywhere you can read it as the recipient, so development still needs the link on disk.
+  if (env.NODE_ENV !== "production") {
     await writeDevMagicLink(url);
-    return;
   }
 
   const component = MagicLinkEmail({ url, expiresInMinutes });
@@ -65,7 +50,7 @@ export async function sendMagicLinkEmail({
   ]);
 
   await getClient().sendEmail({
-    From: env.POSTMARK_FROM_EMAIL!,
+    From: env.POSTMARK_FROM_EMAIL,
     To: email,
     Subject: "Sign in to Arbini Family",
     HtmlBody: html,
@@ -77,16 +62,19 @@ export async function sendMagicLinkEmail({
 /**
  * The most recent magic link, dropped on disk in development.
  *
- * The console warning above is only useful to whoever is looking at the dev server's stdout —
- * which is nobody when the server was started in the background, by a script, or by somebody
- * else. A file at a known path makes the link retrievable either way: `pnpm dev:magic-link`.
+ * A sandbox send is not readable as the recipient, and stdout is only useful to whoever is
+ * watching the dev server — nobody, when it was started in the background, by a script, or by
+ * somebody else. A file at a known path makes the link retrievable either way:
+ * `pnpm dev:magic-link`.
  *
  * Overwrites rather than appends, so the file always holds the link you just asked for instead of
  * a history you have to read the end of.
  *
- * Reachable only from the branch above, which already returned in production — so this cannot put
- * a live credential on a deployed filesystem. It is also best-effort: a dev convenience must never
- * be the reason sign-in fails, hence the swallowed error.
+ * Gated on NODE_ENV so this cannot put a live credential on a deployed filesystem: a magic link
+ * written where a log aggregator or a backup can reach it is a credential readable long after the
+ * fifteen-minute expiry would have closed the window on the intended recipient. It is also
+ * best-effort — a dev convenience must never be the reason sign-in fails, hence the swallowed
+ * error.
  */
 const DEV_MAGIC_LINK_FILE = ".magic-link.local";
 
