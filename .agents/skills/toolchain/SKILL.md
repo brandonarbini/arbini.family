@@ -98,7 +98,8 @@ while the install still stops.
 
 ## Contract
 
-These must be true of this repository. `pnpm dev-env status` reports each one that is not.
+These must be true of this repository. Audit each bullet by reading the repo — no command here
+checks them.
 
 - package.json sets `packageManager` to `pnpm@11.17.0`. — Corepack resolves the pnpm the container and CI both run from this field, so a stale or missing pin is how two machines end up on two pnpm majors against one lockfile.
 - package.json sets `engines.node` to `>=24 <25`. — The container, CI and .node-version all run one Node major; the range is what makes an install on a different one fail loudly instead of at run time.

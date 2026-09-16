@@ -80,6 +80,7 @@ status exists at all, audit every path that writes it against the no-op trap abo
 
 ## Contract
 
-These must be true of this repository. `pnpm dev-env status` reports each one that is not.
+These must be true of this repository. Audit each bullet by reading the repo — no command here
+checks them.
 
 - `lib/env/server.ts` declares the email provider token (`POSTMARK_API_TOKEN` or the provider's equivalent) as required — no `.optional()`, no environment conditional. — An optional token turns every send into a silent no-op the moment an environment forgets it: the delivery row says `skipped`, the log line goes unread, and nobody is mailed for weeks. Production carries a real key and every other environment a sandbox key, so there is never a legitimate blank.

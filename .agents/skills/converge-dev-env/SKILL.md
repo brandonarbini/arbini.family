@@ -1,7 +1,7 @@
 ---
-name: converge
+name: converge-dev-env
 description: >-
-  Use when asked to "converge" this repo, "bring this repo up to standard", "apply
+  Use when asked to "converge" this repo, when `/converge-dev-env` is invoked, "bring this repo up to standard", "apply
   dev-env", or when told "dev-env status says" there is drift; when a new skill has
   appeared under `.agents/skills/**` that this repo hasn't adopted yet; when CI starts
   failing right after the shared dev-env standards changed; or when editing `AGENTS.md`,
@@ -18,7 +18,11 @@ repeatable procedure instead of an ad hoc guess.
 
 1. **Read every contract.** For each `.agents/skills/*/SKILL.md` that has a `## Contract`
    section, read it. Every bullet under `## Contract` is a statement that must be true of
-   this repo right now — not a suggestion, not a future goal.
+   this repo right now — not a suggestion, not a future goal. Reading them and inspecting
+   the repo _is_ the audit: this repository has no `dev-env` command and is not meant to
+   have one, so never look for one, never note its absence, and never treat that absence
+   as a deviation. dev-env is a separate fleet tool run from its own checkout; the skills
+   here are what it ships so this repo can be converged on its own.
 2. **Audit against each bullet**, and fix any deviation using the guidance already
    written in that skill's own body — don't reinvent the fix. Two things stay off-limits
    while fixing:
@@ -32,7 +36,8 @@ repeatable procedure instead of an ad hoc guess.
    `devcontainer exec --workspace-folder . pnpm typecheck`,
    `devcontainer exec --workspace-folder . pnpm test:run`.
 4. **Open a PR** titled `Converge on dev-env standards`, with a description listing each
-   contract item that was out of compliance and how it was resolved. Split unrelated
+   contract item that was out of compliance and how it was resolved — the items and their
+   fixes, with no commentary on how the audit itself was performed. Split unrelated
    items into separate commits where practical — one commit per unrelated item — so the
    PR stays reviewable and any one item can be reverted without the others.
 

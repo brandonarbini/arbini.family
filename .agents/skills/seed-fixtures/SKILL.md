@@ -86,6 +86,7 @@ to each other are worth the extra care, because a dangling link in a seed reads 
 
 ## Contract
 
-These must be true of this repository. `pnpm dev-env status` reports each one that is not.
+These must be true of this repository. Audit each bullet by reading the repo — no command here
+checks them.
 
 - No `package.json` script seeds a production database — no script key naming both `seed` and `prod`, and no seed script that sets `NODE_ENV=production`. — A seed rewrites data and refuses to run outside development; anything production needs is a migration or a separate idempotent bootstrap, so a production seed entry point is a data-loss incident waiting for a paste.
