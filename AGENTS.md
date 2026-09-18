@@ -14,29 +14,34 @@ This project runs in a devcontainer mounted at `/workspace`. Run build, test, li
 
 <!-- END dev-env:environment -->
 
+That includes every `pnpm`, `npx` and `node` invocation — never run them directly on the host.
 `git` and `gh` run on the **host**, never in the container. So does everything under `mobile/` —
-see the `expo-mobile-app` skill.
+see the `mobile-boundary` and `expo-mobile-app` skills. A Cursor cloud agent VM is **not** the
+devcontainer and inverts the first rule — load the `dev-environment` skill before running anything
+there.
 
 ## Skills
 
 Load a skill before doing the work it covers, not after.
 
-| Skill                      | Load it when                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `converge-dev-env`         | Bringing this repo up to the shared dev-env standards, or editing `AGENTS.md` / `CLAUDE.md`.                                         |
-| `db-test-isolation`        | Writing or debugging a test that touches the real database — hooks, cleanup, order-dependent failures.                               |
-| `decision-comments`        | Writing or reviewing a comment, a README, a commit message or a PR description — anything whose reason is not visible from the code. |
-| `dev-environment`          | Before running any command: what goes through `devcontainer exec`, and what to do when the container or its ports misbehave.         |
-| `env-and-secrets`          | Adding an environment variable or a secret, or editing `.env*`, `lib/env/*`, `next.config.ts` or `eslint.config.mjs`.                |
-| `expo-mobile-app`          | Running or editing anything under `mobile/` — it runs on the host, and its install must never reach the root workspace.              |
-| `list-queries`             | Adding a list, picker, search or filter over a table that can grow past a handful of rows.                                           |
-| `next-caching`             | Writing `'use cache'`, `cacheTag`, `updateTag` or a `<Suspense>` boundary — or a page showing stale data.                            |
-| `next-data-layout`         | Creating a route or a domain, or deciding where `data.ts`, `service.ts`, `cache.ts` or `validations.ts` belongs.                     |
-| `next-server-actions`      | Writing `actions.ts`, `validations.ts` or `api/route.ts`; wiring a form, `useActionState` or `redirect()`.                           |
-| `prisma-harness`           | Editing `prisma/schema.prisma`, adding a migration, touching the Vitest/Prisma wiring, or bumping the Prisma/pg stack.               |
-| `prisma-rename-migrations` | Renaming anything the database already holds — a table, a column, an enum value, or a string stored in a row.                        |
-| `seed-fixtures`            | Writing or running the development seed (`prisma/seed.ts`, `pnpm db:seed`).                                                          |
-| `test-mocking`             | Writing a Vitest file that uses `vi.mock`, `vi.fn()` or `vi.hoisted()` — or a mock leaking between tests.                            |
-| `toolchain`                | Editing `package.json` or `pnpm-workspace.yaml` — a script, a dependency, a version pin.                                             |
-| `transactional-email`      | Adding or changing an email, a template under `emails/`, a `send*Email` function, or the provider wiring.                            |
-| `verify-in-browser`        | Before reporting any user-visible change done — `app/**`, `components/**`, styles, copy, `emails/**`.                                |
+| Skill                      | Load it when                                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `converge-dev-env`         | Bringing this repo up to the shared dev-env standards, or editing `AGENTS.md` / `CLAUDE.md`.                                                   |
+| `db-test-isolation`        | Writing or debugging a test that touches the real database — hooks, cleanup, order-dependent failures.                                         |
+| `decision-comments`        | Writing or reviewing a comment, a README, a commit message or a PR description — anything whose reason is not visible from the code.           |
+| `dev-environment`          | Before running any command: what goes through `devcontainer exec`, and what to do when the container or its ports misbehave.                   |
+| `env-and-secrets`          | Adding an environment variable or a secret, or editing `.env*`, `lib/env/*`, `next.config.ts` or `eslint.config.mjs`.                          |
+| `expo-mobile-app`          | Running or editing anything under `mobile/` — it runs on the host, and its install must never reach the root workspace.                        |
+| `list-queries`             | Adding a list, picker, search or filter over a table that can grow past a handful of rows.                                                     |
+| `mobile-boundary`          | Before any `pnpm install`, or editing `mobile/`'s workspace files or the root configs that exclude it — the boundary between the two installs. |
+| `next-caching`             | Writing `'use cache'`, `cacheTag`, `updateTag` or a `<Suspense>` boundary — or a page showing stale data.                                      |
+| `next-data-layout`         | Creating a route or a domain, or deciding where `data.ts`, `service.ts`, `cache.ts` or `validations.ts` belongs.                               |
+| `next-server-actions`      | Writing `actions.ts`, `validations.ts` or `api/route.ts`; wiring a form, `useActionState` or `redirect()`.                                     |
+| `prisma-harness`           | Editing `prisma/schema.prisma`, adding a migration, touching the Vitest/Prisma wiring, or bumping the Prisma/pg stack.                         |
+| `prisma-rename-migrations` | Renaming anything the database already holds — a table, a column, an enum value, or a string stored in a row.                                  |
+| `repo-layout`              | Deciding which top-level directory a file belongs in, or adding a root directory, workspace member or path alias.                              |
+| `seed-fixtures`            | Writing or running the development seed (`prisma/seed.ts`, `pnpm db:seed`).                                                                    |
+| `test-mocking`             | Writing a Vitest file that uses `vi.mock`, `vi.fn()` or `vi.hoisted()` — or a mock leaking between tests.                                      |
+| `toolchain`                | Editing `package.json` or `pnpm-workspace.yaml` — a script, a dependency, a version pin.                                                       |
+| `transactional-email`      | Adding or changing an email, a template under `emails/`, a `send*Email` function, or the provider wiring.                                      |
+| `verify-in-browser`        | Before reporting any user-visible change done — `app/**`, `components/**`, styles, copy, `emails/**`.                                          |
