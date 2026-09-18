@@ -9,7 +9,7 @@ description: >-
   API for a client component"; and for symptoms like "the form shows no error message" or
   an opaque production `digest` error with no detail. Companion to `next-data-layout`
   (where `service.ts` lives) and `next-caching` (`updateTag`/`revalidateTag` mechanics).
-  Library-agnostic — doesn't prescribe zod, react-hook-form, or any particular auth
+  Scoped to `app/`. Library-agnostic — doesn't prescribe zod, react-hook-form, or any particular auth
   library.
 ---
 

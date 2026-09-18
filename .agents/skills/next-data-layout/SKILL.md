@@ -4,11 +4,13 @@ description: >-
   Use when creating a new route or domain in a Next.js App Router app, adding a new file
   under `/app/<route>/` or `/lib/<domain>/`, or deciding where `data.ts`, `service.ts`,
   `cache.ts`, or `validations.ts` should live. Load before importing across routes (one
-  route reaching into a sibling route's files), when asking "where should this live" or
-  "should this be promoted to /lib", and for intent phrasings like "build a
+  route reaching into a sibling route's files), when asking "where should this live inside
+  `app/` or `lib/`" or "should this be promoted to /lib", and for intent phrasings like "build a
   dashboard/list/page for X", "load/show X", "add a domain for X". Covers the two-layer
   structure — route sidecars vs. shared domain primitives — independent of caching or
-  Server Action mechanics; see `next-caching` and `next-server-actions` for those.
+  Server Action mechanics; see `next-caching` and `next-server-actions` for those. Scoped
+  to `app/`, `components/` and `lib/`; `repo-layout` answers which top-level directory a
+  file belongs in, and none of this applies inside `mobile/` (`mobile-boundary`).
   Library-agnostic: prescribes structure, not a specific auth, validation, or fetch
   library.
 ---
@@ -17,7 +19,9 @@ description: >-
 
 Companion skills: `next-caching` (cache directives, tags, invalidation) and
 `next-server-actions` (mutations, forms, validation). This skill is the structural layer
-underneath both — start here when scaffolding a route or domain.
+underneath both — start here when scaffolding a route or domain. `repo-layout` is the
+level above it: it decides which top-level directory a file belongs in; this skill decides
+route sidecar versus `lib/<domain>/` once you're inside `app/` or `lib/`.
 
 ## Two layers
 

@@ -67,7 +67,7 @@ send; `verify-in-browser` says to look at it before reporting a template change 
 
 One row per intended send, with the provider's message id and a terminal status (`sent`,
 `failed`). It turns "did they get the invitation" from a support guess into a query, and it is the
-row an at-most-once claim in a background job keys on (see `background-jobs`). If a `skipped`
+row an at-most-once claim in a background job keys on. If a `skipped`
 status exists at all, audit every path that writes it against the no-op trap above.
 
 ## Rationale

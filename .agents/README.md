@@ -24,6 +24,16 @@ A checkout with `core.symlinks=false` (some Windows and CI environments) materia
 the symlink as a text file. If a tool reports the skills as missing there, read
 `.agents/skills` directly instead.
 
+## Where a skill lives
+
+Skills nest at **project boundaries**, never at directory boundaries inside one project. A nested
+project — its own `package.json`, its own lockfile, its own `AGENTS.md`, such as `mobile/` in a
+repository that also has a web app — gets its own `skills/` directory, because an agent standing
+in it should not be handed the other project's skills. A plain directory of the same project does
+not: its skill is needed by _callers_ elsewhere in the tree (a caller reaching for a shared helper,
+a route reaching into a domain folder), and a skill nested inside the directory the caller never
+opens would simply never load.
+
 ## What belongs where
 
 Sorted by where the knowledge belongs, not by how important it is:

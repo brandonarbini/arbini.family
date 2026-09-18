@@ -3,7 +3,8 @@ name: dev-environment
 description: >-
   Use before running any command in this repository: package, build, test, lint,
   and database commands go through `devcontainer exec --workspace-folder .`, while `git` and
-  `gh` run on the host. Load when editing `.devcontainer/**`, `.conductor/**`; when `devcontainer up` fails, a published port answers nothing, or two
+  `gh` run on the host, and everything under `mobile/` runs on the host too —
+  `mobile-boundary`. Load when editing `.devcontainer/**`, `.conductor/**`; when `devcontainer up` fails, a published port answers nothing, or two
   worktrees fight over the same ports; and on the symptoms `EAI_AGAIN` on every registry request,
   "port is already published by", "does not publish" on start, or a commit rejected by
   `lint-staged` with nothing wrong in the diff.
@@ -23,7 +24,8 @@ This repository is mounted at `/workspace` inside the container — not at
   `devcontainer up --workspace-folder . --remove-existing-container` whenever anything under
   `.devcontainer/` changed: a plain `up` runs `docker compose up -d --no-recreate`, which reuses a
   container built from the old definition.
-- Run everything else through `devcontainer exec --workspace-folder . <command>`. Never drive the
+- Run everything else through `devcontainer exec --workspace-folder . <command>`,
+  except inside `mobile/` — that project runs on the host, not the container (`mobile-boundary`). Never drive the
   services with raw `docker compose` — the compose project name, the per-worktree override file and
   the mounts all come from the devcontainer CLI, and a hand-run `docker compose up` creates a second
   set of containers that fight the first for ports.
