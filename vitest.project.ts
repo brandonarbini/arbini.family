@@ -6,5 +6,9 @@ import { defineConfig } from "vitest/config";
 // directory whose tests belong to another toolchain, a timeout, an extra alias. Scaffolded once and
 // never rewritten.
 export default defineConfig({
-  test: {},
+  test: {
+    // The Expo app tests itself from its own install; this suite runs in `node` against Postgres,
+    // so a React Native test collected here fails on imports it cannot resolve.
+    exclude: ["mobile/**"],
+  },
 });
